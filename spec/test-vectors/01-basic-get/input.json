@@ -1,0 +1,26 @@
+{
+  "name": "01-basic-get",
+  "description": "GET request with @authority + signature-agent only — minimum viable Web Bot Auth signature",
+  "request": {
+    "method": "GET",
+    "url": "https://crawltest.com/cdn-cgi/web-bot-auth",
+    "headers": {},
+    "body": null
+  },
+  "identity": {
+    "private_key_jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "d": "n4Ni-HpISpVObnQMW0wOhCKROaIKqKtW_2ZYb2p9KcU",
+      "x": "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs"
+    },
+    "signature_agent_url": "https://http-message-signatures-example.research.cloudflare.com/"
+  },
+  "signing_params": {
+    "created": 1767225600,
+    "expires_after_seconds": 60,
+    "nonce": "dGVzdC1ub25jZS0wMS1maXhlZC0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "label": "sig1",
+    "covered_components": ["@authority", "signature-agent"]
+  }
+}

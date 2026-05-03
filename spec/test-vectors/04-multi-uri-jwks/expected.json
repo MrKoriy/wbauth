@@ -1,0 +1,23 @@
+{
+  "kid": "poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U",
+  "signature_input_value": "sig1=(\"@authority\" \"signature-agent\");created=1767225600;keyid=\"poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U\";alg=\"ed25519\";expires=1767225660;nonce=\"dGVzdC1ub25jZS0wNC1maXhlZC0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\";tag=\"web-bot-auth\"",
+  "signature_value": "sig1=:o+O0ozHWS2b1OQwU1R09iHDWxuLab3X9fZXKha1jyD0TT7uVNP0lu3PRZpkUewErApdvL+LkF9QqsQvUZOFjBA==:",
+  "signature_agent_value": "\"https://http-message-signatures-example.research.cloudflare.com/\"",
+  "jwks_kid_thumbprint": "poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U",
+  "jwks_full": {
+    "keys": [
+      {
+        "crv": "Ed25519",
+        "kty": "OKP",
+        "kid": "poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U",
+        "x": "JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs"
+      },
+      {
+        "crv": "Ed25519",
+        "kty": "OKP",
+        "kid": "9rgNLUovzKpr-r5SUqm20C4-w7IuTZux1B3oIehDKSc",
+        "x": "Rr9HHV8VgitS2kA0fDRbax98wYbEIC4KzI7ikXZiSvM"
+      }
+    ]
+  }
+}
