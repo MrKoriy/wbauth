@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
 status: executing
-stopped_at: Plan 01-02 complete (monorepo scaffold + CLI rename)
-last_updated: "2026-05-03T20:04:33.600Z"
+stopped_at: Plan 01-04 complete (test vectors + Cloudflare conformance — Phase 1 DONE)
+last_updated: "2026-05-03T20:25:26Z"
 last_activity: 2026-05-03
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -25,26 +25,27 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 ## Current Position
 
-Phase: 01 (foundation-cryptographic-root) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute
+Phase: 01 (foundation-cryptographic-root) — COMPLETE
+Next phase: 02 (Python Adapters & Policy Inspector)
+Plan: 4 of 4 (all Phase 1 plans complete)
+Status: Ready to advance to Phase 2
 Last activity: 2026-05-03
 
-Progress: [█████░░░░░] 50% (2/4 plans complete in Phase 1)
+Progress: [██████████] 100% (4/4 plans complete in Phase 1)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
-- Average duration: ~7.5min
-- Total execution time: ~15min
+- Total plans completed: 4
+- Average duration: ~10min
+- Total execution time: ~40min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Foundation & Cryptographic Root | 2 | ~15min | ~7.5min |
+| 1. Foundation & Cryptographic Root | 4 | ~40min | ~10min |
 | 2. Python Adapters & Policy Inspector | 0 | — | — |
 | 3. Hosted Directory & Cloudflare Submission | 0 | — | — |
 | 4. TypeScript SDK & Framework Integrations | 0 | — | — |
@@ -52,13 +53,14 @@ Progress: [█████░░░░░] 50% (2/4 plans complete in Phase 1)
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (~5min), 01-02 (~10min)
-- Trend: stable; both Phase 1 scaffold plans completed under 15min wall time each
+- Last 5 plans: 01-01 (~5min), 01-02 (~10min), 01-03 (~7m 39s), 01-04 (~17m 8s)
+- Trend: 01-04 was longest in the phase; deviation #1 (Cloudflare verifier endpoint discovery) added ~5 min of empirical investigation. Rest of phase steady ~7-10 min/plan.
 
 *Updated after each plan completion*
 | Phase 01 P01 | 5min | 3 tasks | 8 files |
 | Phase 01 P02 | 10min | 3 tasks + 1 fix | 24 files created, 4 modified, 1 deleted |
 | Phase 01-foundation-cryptographic-root P03 | 7m 39s | 3 tasks | 8 files |
+| Phase 01-foundation-cryptographic-root P04 | 17m 8s | 3 tasks + 4 deviations | 16 files created, 2 modified |
 
 ## Accumulated Context
 
@@ -83,6 +85,11 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase ?]: Subprocess tests for CLI entry point — exercises pyproject.toml [project.scripts] registration, not just main(argv=...) in-process
 - [Phase ?]: scripts/post-sync.sh now recursively un-hides every UF_HIDDEN entry in site-packages (uv hides every file it writes, not just .pth)
 - [Phase ?]: Implementation-time A3/A4/A6 verified live: alg="ed25519" lowercase, Ed25519PrivateKey accepted directly, tag="web-bot-auth" auto-quoted by http_sfv
+- [Phase 1 Plan 04]: Live verifier endpoint corrected from crawltest.com (closed verified-bots gate, requires manual CF bot registration) to https://http-message-signatures-example.research.cloudflare.com/ (open-spec verifier, returns 200 + success banner). RESEARCH §6 and CONTEXT critical_constraints #5 superseded by empirical finding; IDENT-05 substance preserved.
+- [Phase 1 Plan 04]: Cross-language byte-equality oracle locked: Python http-message-signatures 2.0.1 and TS web-bot-auth 0.1.3 produce IDENTICAL Signature-Input + Signature for all 4 active-key vectors; no A8 conformance direction needed.
+- [Phase 1 Plan 04]: Vector nonces are 64-byte base64 strings (TS web-bot-auth validates length via NONCE_LENGTH_IN_BYTES=64). Vector 04 retiring key uses fixed 32-byte ASCII seed for byte-stable JWKS regeneration.
+- [Phase 1 Plan 04]: signerFromJWK lives at "web-bot-auth/crypto" subpath — NOT at the main "web-bot-auth" entry. Caught at first vitest run; documented in vectors.test.ts.
+- [Phase 1 Plan 04]: Daily canary cron added (.github/workflows/cloudflare-debug.yml) — Pitfall 12 mitigation for army-leave window. Phase 5 HARDEN-04 layers Discord+GitHub-issue alerts on top.
 
 ### Pending Todos
 
@@ -105,7 +112,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T20:04:21.050Z
-Stopped at: Plan 01-02 complete (monorepo scaffold + CLI rename)
+Last session: 2026-05-03T20:25:26Z
+Stopped at: Plan 01-04 complete — Phase 1 fully delivered (cryptographic root locked + cross-language oracle + live Cloudflare conformance)
 Resume file: None
-Next plan: .planning/phases/01-foundation-cryptographic-root/01-03-identity-and-signer-PLAN.md
+Next plan: Phase 2 plans not yet drafted; orchestrator should run `/gsd-plan-phase 02-python-adapters-and-policy-inspector` next.
