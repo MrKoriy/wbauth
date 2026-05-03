@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
 status: executing
-stopped_at: Plan 01-02 complete (monorepo scaffold)
-last_updated: "2026-05-03T19:42:00.000Z"
+stopped_at: Plan 01-02 complete (monorepo scaffold + CLI rename)
+last_updated: "2026-05-03T20:04:33.600Z"
 last_activity: 2026-05-03
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 01 (foundation-cryptographic-root) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-03
 
@@ -58,6 +58,7 @@ Progress: [█████░░░░░] 50% (2/4 plans complete in Phase 1)
 *Updated after each plan completion*
 | Phase 01 P01 | 5min | 3 tasks | 8 files |
 | Phase 01 P02 | 10min | 3 tasks + 1 fix | 24 files created, 4 modified, 1 deleted |
+| Phase 01-foundation-cryptographic-root P03 | 7m 39s | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,11 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase 1 Plan 02]: D-10 amended — npm workspaces (root package.json) over pnpm workspaces (no pnpm-workspace.yaml). Lockfile is package-lock.json at root; per-workspace lockfiles deleted.
 - [Phase 1 Plan 02]: CLI command renamed from original-draft to `wbauth` across REQUIREMENTS.md and ROADMAP.md (sub-decision per orchestrator brief). Package + import + CLI all share the name `wbauth`.
 - [Phase 1 Plan 02]: Pinned Python 3.13 via .python-version for reproducibility; macOS dev machines need scripts/post-sync.sh after every `uv sync` (clears UF_HIDDEN flag set by uv on editable .pth; Python 3.13+ skips hidden .pth per CPython security policy GH-99458).
+- [Phase ?]: RFC 7638 thumbprint computation centralized in _compute_kid (canonical JWK ordering, base64url-no-pad SHA-256)
+- [Phase ?]: Pure-function signer with belt-and-suspenders https:// re-check (Identity.__init__ enforces, sign() re-checks defensively)
+- [Phase ?]: Subprocess tests for CLI entry point — exercises pyproject.toml [project.scripts] registration, not just main(argv=...) in-process
+- [Phase ?]: scripts/post-sync.sh now recursively un-hides every UF_HIDDEN entry in site-packages (uv hides every file it writes, not just .pth)
+- [Phase ?]: Implementation-time A3/A4/A6 verified live: alg="ed25519" lowercase, Ed25519PrivateKey accepted directly, tag="web-bot-auth" auto-quoted by http_sfv
 
 ### Pending Todos
 
@@ -99,7 +105,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T19:42:00.000Z
+Last session: 2026-05-03T20:04:21.050Z
 Stopped at: Plan 01-02 complete (monorepo scaffold + CLI rename)
-Resume file: .planning/phases/01-foundation-cryptographic-root/01-02-SUMMARY.md
+Resume file: None
 Next plan: .planning/phases/01-foundation-cryptographic-root/01-03-identity-and-signer-PLAN.md
