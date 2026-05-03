@@ -34,6 +34,8 @@ if [[ -z "${PTH_DIR:-}" ]]; then
 fi
 shopt -s nullglob
 fixed=0
+
+# 1) Editable-install .pth files (the original symptom — wbauth import fails).
 for pth in "$PTH_DIR"/_editable_impl_*.pth; do
   if ls -lO "$pth" | grep -q hidden; then
     chflags nohidden "$pth"
@@ -41,6 +43,27 @@ for pth in "$PTH_DIR"/_editable_impl_*.pth; do
     fixed=$((fixed + 1))
   fi
 done
+
+# 2) Package directories themselves AND their contents. Plan 03 discovery:
+# uv 0.11.7 sets UF_HIDDEN on every file/dir it writes during a sync — not
+# just `.pth` files. When the package dir is hidden, Python's importer
+# treats it as a namespace package (NamespaceLoader instead of regular
+# package), so `from _pytest import __version__` fails with
+# `ImportError: cannot import name '__version__' from '_pytest' (unknown location)`.
+# Even when the top-level dir is un-hidden, the children (sub-packages,
+# .py files) remain hidden and Python skips them.
+#
+# Fix: recursively un-hide the entire site-packages tree. Idempotent
+# (chflags nohidden on a non-hidden entry is a no-op).
+hidden_count=$(find "$PTH_DIR" -flags +hidden 2>/dev/null | wc -l | tr -d ' ')
+if [[ "${hidden_count:-0}" -gt 0 ]]; then
+  # Process in batches; site-packages can have thousands of files.
+  find "$PTH_DIR" -flags +hidden -print0 2>/dev/null \
+    | xargs -0 chflags nohidden 2>/dev/null || true
+  echo "post-sync: cleared UF_HIDDEN on $hidden_count site-packages entries (recursive)"
+  fixed=$((fixed + hidden_count))
+fi
+
 if [[ $fixed -eq 0 ]]; then
-  echo "post-sync: no hidden .pth files found (already clean or non-uv install)"
+  echo "post-sync: no hidden site-packages entries found (already clean or non-uv install)"
 fi
