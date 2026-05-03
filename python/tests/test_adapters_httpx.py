@@ -77,14 +77,33 @@ def test_consecutive_requests_have_different_nonces():
 
 
 def test_ua_injection_when_absent():
-    """Open question #4 (positive branch): identity.user_agent → request UA."""
+    """Open question #4 (positive branch): identity.user_agent → request UA.
+
+    httpx auto-injects a default `python-httpx/X.Y` User-Agent on every
+    request. To verify the adapter's UA-injection branch actually fires
+    when the request truly has no UA at signing time, we build the request
+    manually and pop the auto-set UA before sending.
+    """
     identity = Identity(
         Identity.from_test_key(SIG_AGENT_URL)._active,
         signature_agent_url=SIG_AGENT_URL,
         user_agent="my-bot/1.0 (+https://example.com)",
     )
-    client, captured = _make_capturing_client(identity)
-    client.get("https://example.com/")
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
+        return httpx.Response(200)
+
+    client = httpx.Client(
+        auth=WebBotAuth(identity),
+        transport=httpx.MockTransport(handler),
+    )
+    req = client.build_request("GET", "https://example.com/")
+    # Remove httpx's auto-injected default UA so the adapter sees no UA at signing.
+    if "User-Agent" in req.headers:
+        del req.headers["User-Agent"]
+    client.send(req)
     assert captured[0].headers["User-Agent"] == "my-bot/1.0 (+https://example.com)"
 
 
