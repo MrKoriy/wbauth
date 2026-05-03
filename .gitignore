@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.venv/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Cloudflare wrangler
+.wrangler/
+.dev.vars
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Lockfiles to KEEP (do not ignore):
+# - uv.lock
+# - package-lock.json
+
+# Local key files (NEVER commit private keys)
+*.pem
+!**/test-fixtures/*.pem

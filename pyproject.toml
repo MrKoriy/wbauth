@@ -1,0 +1,12 @@
+[project]
+name = "wbauth-monorepo-root"
+version = "0.0.0"
+requires-python = ">=3.11"
+description = "Workspace root — not a published package"
+
+[tool.uv.workspace]
+members = ["python"]
+# directory/ and typescript/ are npm-workspace members, not uv
+
+[tool.uv]
+package = false
