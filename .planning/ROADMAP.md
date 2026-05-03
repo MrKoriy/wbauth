@@ -13,7 +13,7 @@ Five phases ship a Python+TypeScript OSS toolkit that gives AI agents two superp
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation & Cryptographic Root** - Day-1 hosting test, monorepo scaffold, test vectors, Python signer passing Cloudflare debug verifier
-- [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, agentid CLI core
+- [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, wbauth CLI core
 - [ ] **Phase 3: Hosted Directory & Cloudflare Submission** - FastAPI directory backend at agentpassport.dev, end-to-end registration→sign→verify, Cloudflare verified-bot submission filed
 - [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos, upstream integration PRs
 - [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch
@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Requirements**: IDENT-01, IDENT-02, IDENT-03, IDENT-04, IDENT-05, IDENT-06, IDENT-07, IDENT-08, DIR-06
 **Success Criteria** (what must be TRUE):
   1. Russian payment card is confirmed working on the chosen hosting provider (Fly.io primary; Railway or Cloudflare Workers+D1 fallback if rejected) and the project domain is registered with auto-renewal enabled for >18 months — this is a Day-1 blocker before any code is written
-  2. A developer can run `agentid keygen` and get an Ed25519 keypair written with `0o600` permissions, with the loader refusing wider-permission files; `__repr__` and `__str__` of `Identity` return REDACTED instead of leaking key material
+  2. A developer can run `wbauth keygen` and get an Ed25519 keypair written with `0o600` permissions, with the loader refusing wider-permission files; `__repr__` and `__str__` of `Identity` return REDACTED instead of leaking key material
   3. The pure function `sign(NormalizedRequest, Identity) -> SignatureHeaders` produces RFC 9421 `Signature`, `Signature-Input`, and `Signature-Agent` headers with Web Bot Auth defaults (Ed25519, `tag="web-bot-auth"`, `expires = created + 60s`) and JWKS export uses `kid = base64url(sha256(JWK))` per RFC 7638
   4. Generated signatures pass byte-equal verification against `spec/test-vectors/` (≥5 golden vectors) AND Cloudflare's debug verifier endpoint accepts a request signed by our SDK in <2 seconds end-to-end (CI smoke test plus weekly scheduled run)
   5. Multi-key Identity supports rotation lifecycle (active + retiring key with overlap window); old key remains usable until explicit retirement
@@ -46,7 +46,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `await inspect(url)` returns a frozen `SitePolicy` dataclass with parallel-fetched robots.txt (via `protego`, RFC 9309-compliant), ai.txt v1.1.1, llms.txt (labeled `enforcement: "voluntary"`), and `.well-known/http-message-signatures-directory`; partial failures are isolated (`return_exceptions=True`, `partial: bool`, `errors: dict`) with 3s per-endpoint timeout
   3. `policy.verdict` returns `"allowed" | "restricted" | "forbidden"` with `reasons: list[str]` from a deterministic rule engine (robots authoritative, ai.txt restriction → restricted, signing-required → restricted with mitigation hint); HTML 200 on `/robots.txt` raises explicit parse error rather than silently returning "allowed"
   4. Per-host LRU cache honors `Cache-Control`/`ETag` (defaults: robots.txt 24h, ai.txt 1h, llms.txt 24h) and operates entirely in-process with zero hard cloud dependency — `inspect(url)` works without agentpassport.dev
-  5. `agentid keygen`, `agentid inspect <url>` (with `--json`), and `agentid verify --domain <domain>` (runs Cloudflare debug verifier and prints pass/fail per criterion) all work from the command line, returning non-zero exit codes on failure with machine-readable errors on stderr
+  5. `wbauth keygen`, `wbauth inspect <url>` (with `--json`), and `wbauth verify --domain <domain>` (runs Cloudflare debug verifier and prints pass/fail per criterion) all work from the command line, returning non-zero exit codes on failure with machine-readable errors on stderr
 **Plans**: TBD (estimate 3 plans)
 **Parallelism note**: Adapters (ADAPT-01/02/03) and policy inspector (POLICY-01-08) are independent and can be developed by separate sub-agents in parallel — both depend only on Phase 1 outputs (signer, test vectors). CLI commands stitch on top once each module lands. Run a 1-hour spike on Browser Use Playwright `page.route()` accessibility on Day 1 of this phase before committing to adapter design (research flag from SUMMARY.md).
 
@@ -55,11 +55,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Phase 1 (verifier code path reused for proof-of-key-ownership)
 **Requirements**: DIR-01, DIR-02, DIR-03, DIR-04, DIR-05, DIR-07, DIR-08, CLI-04, CLI-05, DIST-08
 **Success Criteria** (what must be TRUE):
-  1. A user can register an agent via `agentid register --directory https://agentpassport.dev --identity <path>` using proof-of-key-ownership (server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports — no email, no OAuth, no third-party identity provider)
+  1. A user can register an agent via `wbauth register --directory https://agentpassport.dev --identity <path>` using proof-of-key-ownership (server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports — no email, no OAuth, no third-party identity provider)
   2. `GET /.well-known/http-message-signatures-directory/{id}` returns JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed; `/keys/<thumbprint>` is CDN-cached with `Cache-Control: immutable`; per-IP registration rate limit (10/day) and reserved-name blocklist (google, openai, anthropic, cloudflare, microsoft, meta, apple, amazon) prevent abuse
   3. End-to-end flow validated live: register an identity → sign an HTTP request via the SDK with that identity's directory URL → Cloudflare debug endpoint confirms verification passes using the registered directory URL
   4. A nightly snapshot job mirrors the full directory to `/static/all.json` and to a GitHub Pages mirror as disaster recovery (works even if the backend is down); hard spending caps ($20/month) are configured on infrastructure
-  5. Cloudflare verified-bot submission is **filed on Day 1 of this phase** (not Day-last) with the reference demo bot registered both in our own directory AND submitted to Cloudflare's verified-bot directory; `agentid serve [--port N]` runs a local self-hostable JWKS directory server for users who don't want to depend on agentpassport.dev
+  5. Cloudflare verified-bot submission is **filed on Day 1 of this phase** (not Day-last) with the reference demo bot registered both in our own directory AND submitted to Cloudflare's verified-bot directory; `wbauth serve [--port N]` runs a local self-hostable JWKS directory server for users who don't want to depend on agentpassport.dev
 **Plans**: TBD (estimate 2-3 plans)
 **Parallelism note**: Filing the Cloudflare submission is a Day-1-of-phase external action that runs in the background through the rest of the project (review timeline measured in weeks). Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
 
