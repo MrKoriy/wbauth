@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Generated signatures pass byte-equal verification against `spec/test-vectors/` (≥5 golden vectors) AND Cloudflare's debug verifier endpoint accepts a request signed by our SDK in <2 seconds end-to-end (CI smoke test plus weekly scheduled run)
   5. Multi-key Identity supports rotation lifecycle (active + retiring key with overlap window); old key remains usable until explicit retirement
 **Plans**: 4 plans
-- [ ] 01-01-PLAN.md — Day-1 Cloudflare Workers + D1 hosting confirmation (DIR-06; strict serial blocker, autonomous=false)
+- [x] 01-01-PLAN.md — Day-1 Cloudflare Workers + D1 hosting confirmation (DIR-06; strict serial blocker, autonomous=false)
 - [ ] 01-02-PLAN.md — Monorepo scaffold (uv + pnpm workspaces, package metadata, CI workflows, LICENSE; supporting plan)
 - [ ] 01-03-PLAN.md — Identity, signer, JWKS thumbprint, multi-key rotation, REDACTED repr, `wbauth keygen` CLI (IDENT-01, 02, 03, 06, 07, 08)
 - [ ] 01-04-PLAN.md — Test vectors (5 byte-equal + 1 live), pytest+vitest cross-language oracle, Cloudflare debug verifier as hard CI exit criterion (IDENT-04, IDENT-05)
@@ -97,7 +97,7 @@ Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in paralle
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Cryptographic Root | 0/4 | Not started | - |
+| 1. Foundation & Cryptographic Root | 1/4 | In Progress|  |
 | 2. Python Adapters & Policy Inspector | 0/TBD | Not started | - |
 | 3. Hosted Directory & Cloudflare Submission | 0/TBD | Not started | - |
 | 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |

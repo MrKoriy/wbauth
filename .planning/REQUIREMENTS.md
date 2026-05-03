@@ -46,7 +46,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DIR-03**: Backend serves `GET /.well-known/http-message-signatures-directory/{id}` returning JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed
 - [ ] **DIR-04**: Read endpoints CDN-cached with `Cache-Control: immutable` on `/keys/<thumbprint>`; per-IP rate limiting on registration (10/day); reserved-name blocklist (google, openai, anthropic, cloudflare, microsoft, meta, apple, amazon)
 - [ ] **DIR-05**: Snapshot job mirrors full directory to `/static/all.json` and to a GitHub Pages mirror nightly (disaster recovery — works even if backend is down)
-- [ ] **DIR-06**: Hosting confirmed working with Russian payment card on day 1 (Fly.io primary; Railway fallback; Cloudflare Workers + D1 zero-billing fallback if both rejected); domain auto-renewal enabled for >18 months
+- [x] **DIR-06**: Hosting confirmed working with Russian payment card on day 1 (Fly.io primary; Railway fallback; Cloudflare Workers + D1 zero-billing fallback if both rejected); domain auto-renewal enabled for >18 months
 - [ ] **DIR-07**: Hard spending caps configured on infrastructure ($20/month limit on directory hosting); abuse vectors (spam registrations, claimed-as-Google identity attempts) handled via blocklist + rate limit + manual review queue
 - [ ] **DIR-08**: End-to-end flow validated: register identity → sign HTTP request via SDK → Cloudflare debug endpoint confirms verification passes using the registered directory URL
 
@@ -159,7 +159,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIR-03 | Phase 3 | Pending |
 | DIR-04 | Phase 3 | Pending |
 | DIR-05 | Phase 3 | Pending |
-| DIR-06 | Phase 1 | Pending |
+| DIR-06 | Phase 1 | Complete |
 | DIR-07 | Phase 3 | Pending |
 | DIR-08 | Phase 3 | Pending |
 | CLI-01 | Phase 2 | Pending |

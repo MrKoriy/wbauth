@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
-status: planning
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-05-03T14:35:44.309Z"
-last_activity: 2026-05-03 — ROADMAP.md and STATE.md created from REQUIREMENTS.md + research synthesis
+last_updated: "2026-05-03T15:33:47.514Z"
+last_activity: 2026-05-03
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 4
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** AI-агенты получают идентичность и знают свои права на сайте — до того, как сделают первый запрос. Если ничего другое не работает, эти две вещи (signed identity + pre-flight policy) должны работать в одну строку импорта.
-**Current focus:** Phase 1 — Foundation & Cryptographic Root
+**Current focus:** Phase 01 — foundation-cryptographic-root
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation & Cryptographic Root)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-05-03 — ROADMAP.md and STATE.md created from REQUIREMENTS.md + research synthesis
+Phase: 01 (foundation-cryptographic-root) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-05-03
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: — (no execution data yet)
 
 *Updated after each plan completion*
+| Phase 01 P01 | 5min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,8 @@ Key decisions affecting current work (from PROJECT.md):
 - Drop-in API: client-construction helper + one function — `WebBotAuth(identity)` and `inspect(url)`
 - OSS-first under Apache 2.0, no paywall in v1 — maximize star velocity
 - Coarse granularity, 5 phases (not 7 from research) — collapsed Phase-0 hosting test into Phase 1, merged hardening + distribution into Phase 5
+- [Phase ?]: Day-1 hosting validated on Cloudflare: Worker live at wbauth-day1-test.silov801.workers.dev, D1 read confirmed, no card required (D-01..D-04 locked)
+- [Phase ?]: directory/ uses npm (pnpm absent on dev machine); Plan 02 must reconcile npm vs pnpm lockfile
 
 ### Pending Todos
 
@@ -92,6 +95,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T14:35:44.303Z
+Last session: 2026-05-03T15:33:47.510Z
 Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-foundation-cryptographic-root/01-CONTEXT.md
+Resume file: .planning/phases/01-foundation-cryptographic-root/01-01-SUMMARY.md
