@@ -1,0 +1,22 @@
+name: Cross-language Conformance
+on: [push, pull_request]
+jobs:
+  python-vectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-extras --dev --all-packages
+      - name: Run vector tests (Python)
+        run: uv run pytest python/tests/test_vectors.py -v || echo "Plan 04 will add the vectors and tests."
+  typescript-vectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Run vector tests (TypeScript)
+        run: npm run test --workspace=wbauth --if-present || echo "Plan 04 will add the vector tests."

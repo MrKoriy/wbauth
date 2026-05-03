@@ -28,7 +28,7 @@ packages = ["src/wbauth"]
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "pytest-anyio>=4",
+    "anyio>=4",
     "ruff>=0.6",
     "pyright>=1.1",
 ]
