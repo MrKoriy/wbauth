@@ -1,0 +1,13 @@
+# Big Docs Site
+> Comprehensive documentation for our platform
+
+## Getting Started
+- [Install](https://example.com/install)
+- [First request](https://example.com/first): hello world
+
+## Reference
+- [API](https://example.com/api): full API surface
+- [CLI](https://example.com/cli)
+
+## Optional
+- [Advanced patterns](https://example.com/advanced)

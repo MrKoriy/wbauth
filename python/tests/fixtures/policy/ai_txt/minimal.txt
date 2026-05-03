@@ -1,0 +1,11 @@
+[identity]
+name: Example Inc
+url: https://example.com
+
+[permissions]
+- Summarise publicly available content
+- Cite with attribution
+
+[restrictions]
+- Do not generate fake quotes
+- Do not impersonate the brand

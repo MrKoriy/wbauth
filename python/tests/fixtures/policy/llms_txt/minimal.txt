@@ -1,0 +1,6 @@
+# Example Project
+> A demo of llms.txt for our docs
+
+## Docs
+- [Quickstart](https://example.com/quickstart): get started in 5 minutes
+- [API reference](https://example.com/api)
