@@ -12,8 +12,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **IDENT-01**: Developer can generate Ed25519 keypair via Python API and CLI (`wbauth keygen`); private key written with `0o600` permissions; loading refuses files with wider permissions
 - [x] **IDENT-02**: Developer can construct a long-lived `Identity` object that holds keypair + agent metadata (signature-agent URI, expected user-agent string)
 - [x] **IDENT-03**: SDK signs an HTTP request via pure function `sign(NormalizedRequest, Identity) -> SignatureHeaders` producing valid RFC 9421 `Signature`, `Signature-Input`, and `Signature-Agent` headers with Web Bot Auth profile defaults (Ed25519, `tag="web-bot-auth"`, `expires = created + 60s`)
-- [ ] **IDENT-04**: Generated signatures pass byte-equal verification against `spec/test-vectors/` golden files (cross-language oracle for Python and TS parity)
-- [ ] **IDENT-05**: Generated signatures pass Cloudflare's debug verifier endpoint (`http-message-signatures-example.research.cloudflare.com/debug`) in CI smoke tests
+- [x] **IDENT-04**: Generated signatures pass byte-equal verification against `spec/test-vectors/` golden files (cross-language oracle for Python and TS parity)
+- [x] **IDENT-05**: Generated signatures pass Cloudflare's open-spec research verifier (`https://http-message-signatures-example.research.cloudflare.com/`) in CI smoke tests + daily canary; verifier returns banner "You successfully authenticated as owning the test public key". (Note: original draft pointed at crawltest.com/cdn-cgi/web-bot-auth, which Plan 01-04 empirically discovered is the closed verified-bots gate requiring manual Cloudflare bot registration — out of Phase 1 scope. The research-server verifier is the open-spec gate; Cloudflare verified-bots submission tracked separately for Phase 5+.)
 - [x] **IDENT-06**: SDK exports JWKS for the active keypair with `kid = base64url(sha256(JWK))` per RFC 7638
 - [x] **IDENT-07**: SDK supports key rotation lifecycle (multi-key Identity holds active + retiring key with overlap window); old key remains usable until explicit retirement
 - [x] **IDENT-08**: Identity object's `__repr__` and `__str__` return REDACTED instead of leaking private key material
@@ -139,8 +139,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IDENT-01 | Phase 1 | Complete |
 | IDENT-02 | Phase 1 | Complete |
 | IDENT-03 | Phase 1 | Complete |
-| IDENT-04 | Phase 1 | Pending |
-| IDENT-05 | Phase 1 | Pending |
+| IDENT-04 | Phase 1 | Complete |
+| IDENT-05 | Phase 1 | Complete |
 | IDENT-06 | Phase 1 | Complete |
 | IDENT-07 | Phase 1 | Complete |
 | IDENT-08 | Phase 1 | Complete |
