@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
-status: Ready to advance to Phase 2
+status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-05-03T21:05:44.567Z"
+last_updated: "2026-05-03T21:54:20.749Z"
 last_activity: 2026-05-03
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_plans: 7
+  completed_plans: 5
+  percent: 71
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** AI-агенты получают идентичность и знают свои права на сайте — до того, как сделают первый запрос. Если ничего другое не работает, эти две вещи (signed identity + pre-flight policy) должны работать в одну строку импорта.
-**Current focus:** Phase 01 — foundation-cryptographic-root
+**Current focus:** Phase 02 — python-adapters-policy-inspector
 
 ## Current Position
 
-Phase: 01 (foundation-cryptographic-root) — COMPLETE
+Phase: 02 (python-adapters-policy-inspector) — EXECUTING
 Next phase: 02 (Python Adapters & Policy Inspector)
-Plan: 4 of 4 (all Phase 1 plans complete)
-Status: Ready to advance to Phase 2
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-05-03
 
 Progress: [██████████] 100% (4/4 plans complete in Phase 1)
@@ -61,6 +61,7 @@ Progress: [██████████] 100% (4/4 plans complete in Phase 1)
 | Phase 01 P02 | 10min | 3 tasks + 1 fix | 24 files created, 4 modified, 1 deleted |
 | Phase 01-foundation-cryptographic-root P03 | 7m 39s | 3 tasks | 8 files |
 | Phase 01-foundation-cryptographic-root P04 | 17m 8s | 3 tasks + 4 deviations | 16 files created, 2 modified |
+| Phase 02-python-adapters-policy-inspector P01 | 30min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase 1 Plan 04]: Vector nonces are 64-byte base64 strings (TS web-bot-auth validates length via NONCE_LENGTH_IN_BYTES=64). Vector 04 retiring key uses fixed 32-byte ASCII seed for byte-stable JWKS regeneration.
 - [Phase 1 Plan 04]: signerFromJWK lives at "web-bot-auth/crypto" subpath — NOT at the main "web-bot-auth" entry. Caught at first vitest run; documented in vectors.test.ts.
 - [Phase 1 Plan 04]: Daily canary cron added (.github/workflows/cloudflare-debug.yml) — Pitfall 12 mitigation for army-leave window. Phase 5 HARDEN-04 layers Discord+GitHub-issue alerts on top.
+- [Phase ?]: Adapters use direct submodule imports (wbauth.signer, wbauth.normalized_request) to avoid circular import via wbauth/__init__.py re-exports
+- [Phase ?]: Content-Digest auto-computation lives in wbauth.adapters._utils.ensure_content_digest (not in signer); fulfills Phase-1 signer's TODO for POST/PUT/PATCH body requests
+- [Phase ?]: Plan 02-01 frontloaded all Phase-2 runtime + dev deps (cachetools, playwright, protego, requests; pytest-httpx, responses) so 02-02 stays append-only on pyproject.toml
 
 ### Pending Todos
 
@@ -112,7 +116,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T21:05:44.560Z
+Last session: 2026-05-03T21:54:20.744Z
 Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-python-adapters-policy-inspector/02-CONTEXT.md
+Resume file: None
 Next plan: Phase 2 plans not yet drafted; orchestrator should run `/gsd-plan-phase 02-python-adapters-and-policy-inspector` next.

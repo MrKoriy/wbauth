@@ -20,13 +20,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### HTTP Client Adapters
 
-- [ ] **ADAPT-01**: Python `httpx` adapter — `WebBotAuth(identity)` subclass of `httpx.Auth`; drop-in via `httpx.Client(auth=WebBotAuth(identity))`
-- [ ] **ADAPT-02**: Python `requests` adapter — transport adapter usable via `session.mount(...)` or `auth=` parameter
-- [ ] **ADAPT-03**: Python Playwright integration helper — `attach_signing(page, identity)` registers `page.route("**/*", handler)` that signs outgoing requests (NOT `set_extra_http_headers`, which is static)
+- [x] **ADAPT-01**: Python `httpx` adapter — `WebBotAuth(identity)` subclass of `httpx.Auth`; drop-in via `httpx.Client(auth=WebBotAuth(identity))`
+- [x] **ADAPT-02**: Python `requests` adapter — transport adapter usable via `session.mount(...)` or `auth=` parameter
+- [x] **ADAPT-03**: Python Playwright integration helper — `attach_signing(page, identity)` registers `page.route("**/*", handler)` that signs outgoing requests (NOT `set_extra_http_headers`, which is static)
 - [ ] **ADAPT-04**: TypeScript `fetch` adapter — `createSignedFetch(identity)` returns a wrapped fetch with identical signature semantics
 - [ ] **ADAPT-05**: TypeScript Playwright integration helper — `applyTo(page, identity)` mirroring Python behavior
-- [ ] **ADAPT-06**: All adapters validated against shared `spec/test-vectors/` to guarantee byte-equality across languages and clients
-- [ ] **ADAPT-07**: Each adapter file is ≤50 LOC of glue; complexity lives in the pure signer
+- [x] **ADAPT-06**: All adapters validated against shared `spec/test-vectors/` to guarantee byte-equality across languages and clients
+- [x] **ADAPT-07**: Each adapter file is ≤50 LOC of glue; complexity lives in the pure signer
 
 ### Pre-flight Policy Inspector
 
@@ -144,13 +144,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IDENT-06 | Phase 1 | Complete |
 | IDENT-07 | Phase 1 | Complete |
 | IDENT-08 | Phase 1 | Complete |
-| ADAPT-01 | Phase 2 | Pending |
-| ADAPT-02 | Phase 2 | Pending |
-| ADAPT-03 | Phase 2 | Pending |
+| ADAPT-01 | Phase 2 | Complete |
+| ADAPT-02 | Phase 2 | Complete |
+| ADAPT-03 | Phase 2 | Complete |
 | ADAPT-04 | Phase 4 | Pending |
 | ADAPT-05 | Phase 4 | Pending |
-| ADAPT-06 | Phase 2 | Pending |
-| ADAPT-07 | Phase 2 | Pending |
+| ADAPT-06 | Phase 2 | Complete |
+| ADAPT-07 | Phase 2 | Complete |
 | POLICY-01 | Phase 2 | Pending |
 | POLICY-02 | Phase 2 | Pending |
 | POLICY-03 | Phase 2 | Pending |
