@@ -57,14 +57,15 @@ def _fake_policy(
     )
 
 
-async def _async_value(v):
-    """Wrap a sync value in a coroutine so `asyncio.run(coro)` returns it.
-
-    The CLI calls `asyncio.run(inspect(url))` — patching `inspect` with
-    `return_value=_async_value(policy)` makes the patched callable return a
-    fresh coroutine each call (which is what `asyncio.run` needs).
-    """
-    return v
+# NOTE on patching async functions:
+# `unittest.mock.patch("wbauth.cli.inspect", ...)` auto-detects that the
+# original `inspect` is an `async def` and substitutes `AsyncMock` (not
+# MagicMock). AsyncMock's `return_value` is what callers see *after*
+# awaiting the resulting coroutine. So we pass the bare SitePolicy as
+# `return_value` and `asyncio.run(inspect(url))` produces it directly.
+# Wrapping the value in another coroutine (e.g. `_async_value`) creates a
+# nested coroutine that's never awaited — caused 8 failures the first time
+# this file was written.
 
 
 # ---------- Exit code matrix (D-24) ----------
@@ -74,7 +75,7 @@ def test_inspect_exit_code_allowed_returns_0(capsys):
     """D-24: `verdict="allowed"` → exit code 0."""
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(_fake_policy("allowed")),
+        return_value=_fake_policy("allowed"),
     ):
         rc = main(["inspect", "https://example.com/"])
     assert rc == 0, f"expected 0 for 'allowed', got {rc}"
@@ -87,7 +88,7 @@ def test_inspect_exit_code_restricted_returns_1(capsys):
     """D-24: `verdict="restricted"` → exit code 1."""
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(_fake_policy("restricted")),
+        return_value=_fake_policy("restricted"),
     ):
         rc = main(["inspect", "https://example.com/"])
     assert rc == 1, f"expected 1 for 'restricted', got {rc}"
@@ -99,7 +100,7 @@ def test_inspect_exit_code_forbidden_returns_2(capsys):
     """D-24: `verdict="forbidden"` → exit code 2."""
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(_fake_policy("forbidden")),
+        return_value=_fake_policy("forbidden"),
     ):
         rc = main(["inspect", "https://example.com/"])
     assert rc == 2, f"expected 2 for 'forbidden', got {rc}"
@@ -156,7 +157,7 @@ def test_inspect_human_summary_contains_all_sections(capsys):
             "ai.txt fetch failed (partial)",
         ],
     )
-    with patch("wbauth.cli.inspect", return_value=_async_value(policy)):
+    with patch("wbauth.cli.inspect", return_value=policy):
         rc = main(["inspect", "https://example.com/"])
     assert rc == 1
     out = capsys.readouterr().out
@@ -178,7 +179,7 @@ def test_inspect_human_summary_no_errors_says_none(capsys):
     """When `errors={}`, the human summary prints "Errors:  none" (not an empty bullet list)."""
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(_fake_policy("allowed")),
+        return_value=_fake_policy("allowed"),
     ):
         rc = main(["inspect", "https://example.com/"])
     assert rc == 0
@@ -194,7 +195,7 @@ def test_inspect_json_serializes_full_policy(capsys):
     """--json: stdout is valid JSON containing all SitePolicy top-level fields."""
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(_fake_policy("restricted")),
+        return_value=_fake_policy("restricted"),
     ):
         rc = main(["inspect", "https://example.com/", "--json"])
     assert rc == 1
@@ -228,9 +229,8 @@ def test_inspect_json_serializes_errors_dict_with_type_and_message(capsys):
     err = {"ai_txt": TimeoutError("3s exceeded")}
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(
-            _fake_policy("restricted", partial=True, errors=err)
-        ),
+        return_value=_fake_policy("restricted", partial=True, errors=err)
+        ,
     ):
         rc = main(["inspect", "https://example.com/", "--json"])
     assert rc == 1
@@ -246,7 +246,7 @@ def test_inspect_json_datetime_serializes_to_iso_string(capsys):
     """--json: fetched_at is a datetime → must serialize to a string (ISO 8601)."""
     with patch(
         "wbauth.cli.inspect",
-        return_value=_async_value(_fake_policy("allowed")),
+        return_value=_fake_policy("allowed"),
     ):
         main(["inspect", "https://example.com/", "--json"])
     doc = json.loads(capsys.readouterr().out)
