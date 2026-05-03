@@ -1,0 +1,2 @@
+this is not a robots.txt file
+just some prose with no directives

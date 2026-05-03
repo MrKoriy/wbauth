@@ -1,0 +1,7 @@
+[identity]
+name: Restrictive Site
+
+[restrictions]
+- No AI training without explicit permission
+- No inference of new content from this site
+- No commercial use of summaries
