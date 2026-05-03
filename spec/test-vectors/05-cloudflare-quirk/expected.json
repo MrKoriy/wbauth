@@ -1,0 +1,7 @@
+{
+  "kid": "poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U",
+  "signature_input_value": "sig1=(\"@authority\" \"signature-agent\");created=1767225600;keyid=\"poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U\";alg=\"ed25519\";expires=1767225660;nonce=\"dGVzdC1ub25jZS0wNS1maXhlZC0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\";tag=\"web-bot-auth\"",
+  "signature_value": "sig1=:O7g2qIT3R1KAKd/Dxlsl4v3+tdOvvIX99MlHkv/zuOgkj0dPMq6Vze0lfBvAcemV9N5vX6PIlv4uTV+kq++6Aw==:",
+  "signature_agent_value": "\"https://http-message-signatures-example.research.cloudflare.com/\"",
+  "jwks_kid_thumbprint": "poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U"
+}
