@@ -1,4 +1,6 @@
 name: Cross-language Conformance
+# Cross-language byte-equality test vectors (IDENT-04) plus the live
+# Cloudflare research-verifier smoke test (IDENT-05). Gates every merge.
 on: [push, pull_request]
 jobs:
   python-vectors:
@@ -8,7 +10,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --all-extras --dev --all-packages
       - name: Run vector tests (Python)
-        run: uv run pytest python/tests/test_vectors.py -v || echo "Plan 04 will add the vectors and tests."
+        run: uv run pytest python/tests/test_vectors.py -v
   typescript-vectors:
     runs-on: ubuntu-latest
     steps:
@@ -19,4 +21,15 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Run vector tests (TypeScript)
-        run: npm run test --workspace=wbauth --if-present || echo "Plan 04 will add the vector tests."
+        run: npm run test --workspace=wbauth
+  cloudflare-debug:
+    needs: [python-vectors]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - name: Cloudflare research-verifier smoke test
+        run: uv run python -m wbauth._smoke.cloudflare_debug
+        # Same script the dedicated cloudflare-debug.yml workflow runs daily.
+        # Per-PR run gates merges; daily run catches Cloudflare-side spec drift.

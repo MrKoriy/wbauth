@@ -1,0 +1,42 @@
+name: Cloudflare Debug Verifier
+# Runs the live conformance smoke test against Cloudflare's open-spec
+# research verifier (http-message-signatures-example.research.cloudflare.com)
+# on every push to main, every PR, AND on a daily schedule (12:00 UTC).
+#
+# The daily schedule is the Pitfall 12 mitigation: catches Cloudflare-side
+# spec drift / verifier outages during the unmaintained period (army leave).
+#
+# IDENT-05: a non-zero exit on this job means the cryptographic root has
+# regressed; block the merge / open an incident.
+#
+# NOTE: The original plan (and CONTEXT.md critical_constraints) referred to
+# crawltest.com/cdn-cgi/web-bot-auth as the verifier. That is Cloudflare's
+# CLOSED verified-bots gate which requires manual bot registration via the
+# dashboard Bot Submission Form (out of Phase 1 scope). The CORRECT open-spec
+# verifier is the research server's root URL, which validates against the
+# RFC 9421 Appendix B.1.4 published test key. See:
+# python/src/wbauth/_smoke/cloudflare_debug.py docstring for the empirical
+# investigation that established this.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 12 * * *'   # daily canary at 12:00 UTC (Pitfall 12 mitigation)
+  workflow_dispatch:       # allow manual re-run from the Actions UI
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - name: Sign + send to Cloudflare research verifier
+        run: uv run python -m wbauth._smoke.cloudflare_debug
+        # Exits non-zero on:
+        #   - non-200 HTTP status from the verifier (network / CDN issue)
+        #   - "The Signature you sent does not validate" banner (signer regression)
+        #   - neither success nor failure banner present (verifier changed format)
+        # If this job fails, the cryptographic root is broken — block the merge.
