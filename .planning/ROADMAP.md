@@ -47,8 +47,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `policy.verdict` returns `"allowed" | "restricted" | "forbidden"` with `reasons: list[str]` from a deterministic rule engine (robots authoritative, ai.txt restriction → restricted, signing-required → restricted with mitigation hint); HTML 200 on `/robots.txt` raises explicit parse error rather than silently returning "allowed"
   4. Per-host LRU cache honors `Cache-Control`/`ETag` (defaults: robots.txt 24h, ai.txt 1h, llms.txt 24h) and operates entirely in-process with zero hard cloud dependency — `inspect(url)` works without agentpassport.dev
   5. `wbauth keygen`, `wbauth inspect <url>` (with `--json`), and `wbauth verify --domain <domain>` (runs Cloudflare debug verifier and prints pass/fail per criterion) all work from the command line, returning non-zero exit codes on failure with machine-readable errors on stderr
-**Plans**: TBD (estimate 3 plans)
-**Parallelism note**: Adapters (ADAPT-01/02/03) and policy inspector (POLICY-01-08) are independent and can be developed by separate sub-agents in parallel — both depend only on Phase 1 outputs (signer, test vectors). CLI commands stitch on top once each module lands. Run a 1-hour spike on Browser Use Playwright `page.route()` accessibility on Day 1 of this phase before committing to adapter design (research flag from SUMMARY.md).
+**Plans**: 3 plans
+- [ ] 02-01-PLAN.md — Three Python HTTP-client adapters (httpx, requests, Playwright) with byte-equal conformance vs Phase-1 test vectors; ADAPT-01,02,03,06,07
+- [ ] 02-02-PLAN.md — Async policy inspector (4-endpoint fan-out, four parsers, strict verdict engine, per-host LRU cache); POLICY-01..08
+- [ ] 02-03-PLAN.md — wbauth CLI extension (inspect + verify subcommands; keygen exit-code/stderr audit); CLI-01,02,03,06
+**Parallelism note**: Plans 02-01 and 02-02 share zero code dependencies (adapters wrap signer; inspector fetches HTTP without signer involvement) but both touch `python/src/wbauth/__init__.py` and `python/pyproject.toml` — wave-purity rule forces 02-02 to wave 2 (sequential after 02-01). 02-03 is wave 3 (depends on both prior plans). Browser Use Playwright spike was DROPPED per CONTEXT.md D-13 — async page.route confidence HIGH; Phase 4 demo is the live verification.
 
 ### Phase 3: Hosted Directory & Cloudflare Submission
 **Goal**: Stand up the public `agentpassport.dev` directory backend so verifiers (Cloudflare, AWS, Akamai) can fetch JWKS for any registered agent, prove the full register→sign→verify flow end-to-end, and file the Cloudflare verified-bot submission whose opaque review timeline makes it the hardest external dependency to start late.
@@ -98,7 +101,7 @@ Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in paralle
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Cryptographic Root | 4/4 | Complete | 2026-05-03 |
-| 2. Python Adapters & Policy Inspector | 0/TBD | Not started | - |
+| 2. Python Adapters & Policy Inspector | 0/3 | Not started | - |
 | 3. Hosted Directory & Cloudflare Submission | 0/TBD | Not started | - |
 | 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |
 | 5. Pre-Army Hardening, Docs & Launch | 0/TBD | Not started | - |
