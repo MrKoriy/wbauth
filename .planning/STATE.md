@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-05-03T15:33:47.514Z"
+stopped_at: Plan 01-02 complete (monorepo scaffold)
+last_updated: "2026-05-03T19:42:00.000Z"
 last_activity: 2026-05-03
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
-  percent: 25
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -26,25 +26,25 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 01 (foundation-cryptographic-root) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-03
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████░░░░░] 50% (2/4 plans complete in Phase 1)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 2
+- Average duration: ~7.5min
+- Total execution time: ~15min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Foundation & Cryptographic Root | 0 | — | — |
+| 1. Foundation & Cryptographic Root | 2 | ~15min | ~7.5min |
 | 2. Python Adapters & Policy Inspector | 0 | — | — |
 | 3. Hosted Directory & Cloudflare Submission | 0 | — | — |
 | 4. TypeScript SDK & Framework Integrations | 0 | — | — |
@@ -52,11 +52,12 @@ Progress: [░░░░░░░░░░] 0%
 
 **Recent Trend:**
 
-- Last 5 plans: —
-- Trend: — (no execution data yet)
+- Last 5 plans: 01-01 (~5min), 01-02 (~10min)
+- Trend: stable; both Phase 1 scaffold plans completed under 15min wall time each
 
 *Updated after each plan completion*
 | Phase 01 P01 | 5min | 3 tasks | 8 files |
+| Phase 01 P02 | 10min | 3 tasks + 1 fix | 24 files created, 4 modified, 1 deleted |
 
 ## Accumulated Context
 
@@ -73,6 +74,9 @@ Key decisions affecting current work (from PROJECT.md):
 - Coarse granularity, 5 phases (not 7 from research) — collapsed Phase-0 hosting test into Phase 1, merged hardening + distribution into Phase 5
 - [Phase ?]: Day-1 hosting validated on Cloudflare: Worker live at wbauth-day1-test.silov801.workers.dev, D1 read confirmed, no card required (D-01..D-04 locked)
 - [Phase ?]: directory/ uses npm (pnpm absent on dev machine); Plan 02 must reconcile npm vs pnpm lockfile
+- [Phase 1 Plan 02]: D-10 amended — npm workspaces (root package.json) over pnpm workspaces (no pnpm-workspace.yaml). Lockfile is package-lock.json at root; per-workspace lockfiles deleted.
+- [Phase 1 Plan 02]: CLI command renamed from original-draft to `wbauth` across REQUIREMENTS.md and ROADMAP.md (sub-decision per orchestrator brief). Package + import + CLI all share the name `wbauth`.
+- [Phase 1 Plan 02]: Pinned Python 3.13 via .python-version for reproducibility; macOS dev machines need scripts/post-sync.sh after every `uv sync` (clears UF_HIDDEN flag set by uv on editable .pth; Python 3.13+ skips hidden .pth per CPython security policy GH-99458).
 
 ### Pending Todos
 
@@ -95,6 +99,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T15:33:47.510Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-foundation-cryptographic-root/01-01-SUMMARY.md
+Last session: 2026-05-03T19:42:00.000Z
+Stopped at: Plan 01-02 complete (monorepo scaffold + CLI rename)
+Resume file: .planning/phases/01-foundation-cryptographic-root/01-02-SUMMARY.md
+Next plan: .planning/phases/01-foundation-cryptographic-root/01-03-identity-and-signer-PLAN.md
