@@ -49,8 +49,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. `wbauth keygen`, `wbauth inspect <url>` (with `--json`), and `wbauth verify --domain <domain>` (runs Cloudflare debug verifier and prints pass/fail per criterion) all work from the command line, returning non-zero exit codes on failure with machine-readable errors on stderr
 **Plans**: 3 plans
 - [x] 02-01-PLAN.md — Three Python HTTP-client adapters (httpx, requests, Playwright) with byte-equal conformance vs Phase-1 test vectors; ADAPT-01,02,03,06,07
-- [ ] 02-02-PLAN.md — Async policy inspector (4-endpoint fan-out, four parsers, strict verdict engine, per-host LRU cache); POLICY-01..08
-- [ ] 02-03-PLAN.md — wbauth CLI extension (inspect + verify subcommands; keygen exit-code/stderr audit); CLI-01,02,03,06
+- [x] 02-02-PLAN.md — Async policy inspector (4-endpoint fan-out, four parsers, strict verdict engine, per-host LRU cache); POLICY-01..08
+- [x] 02-03-PLAN.md — wbauth CLI extension (inspect + verify subcommands; keygen exit-code/stderr audit); CLI-01,02,03,06
 **Parallelism note**: Plans 02-01 and 02-02 share zero code dependencies (adapters wrap signer; inspector fetches HTTP without signer involvement) but both touch `python/src/wbauth/__init__.py` and `python/pyproject.toml` — wave-purity rule forces 02-02 to wave 2 (sequential after 02-01). 02-03 is wave 3 (depends on both prior plans). Browser Use Playwright spike was DROPPED per CONTEXT.md D-13 — async page.route confidence HIGH; Phase 4 demo is the live verification.
 
 ### Phase 3: Hosted Directory & Cloudflare Submission
