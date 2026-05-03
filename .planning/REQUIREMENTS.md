@@ -57,12 +57,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Command Line Interface
 
-- [ ] **CLI-01**: `wbauth keygen [--output PATH]` generates Ed25519 keypair, writes private key with `0o600`, prints public JWK fingerprint
-- [ ] **CLI-02**: `wbauth inspect <url>` runs the policy inspector and prints structured `SitePolicy` (machine-readable JSON via `--json`; human-readable summary by default with verdict + reasons)
-- [ ] **CLI-03**: `wbauth verify --domain <domain>` runs Cloudflare's debug verifier against the user's identity and prints pass/fail per criterion (canonicalization, header presence, expiry window, signed components)
+- [x] **CLI-01**: `wbauth keygen [--output PATH]` generates Ed25519 keypair, writes private key with `0o600`, prints public JWK fingerprint
+- [x] **CLI-02**: `wbauth inspect <url>` runs the policy inspector and prints structured `SitePolicy` (machine-readable JSON via `--json`; human-readable summary by default with verdict + reasons)
+- [x] **CLI-03**: `wbauth verify --domain <domain>` runs Cloudflare's debug verifier against the user's identity and prints pass/fail per criterion (canonicalization, header presence, expiry window, signed components)
 - [ ] **CLI-04**: `wbauth register --directory <url> --identity <path>` publishes identity to the hosted directory using the proof-of-ownership flow
 - [ ] **CLI-05**: `wbauth serve [--port N]` runs a local self-hostable JWKS directory server (FastAPI) for users who don't want to depend on agentpassport.dev
-- [ ] **CLI-06**: All CLI commands return non-zero exit codes on failure and emit machine-readable errors to stderr
+- [x] **CLI-06**: All CLI commands return non-zero exit codes on failure and emit machine-readable errors to stderr
 
 ### Distribution & Documentation
 
@@ -167,12 +167,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIR-06 | Phase 1 | Complete |
 | DIR-07 | Phase 3 | Pending |
 | DIR-08 | Phase 3 | Pending |
-| CLI-01 | Phase 2 | Pending |
-| CLI-02 | Phase 2 | Pending |
-| CLI-03 | Phase 2 | Pending |
+| CLI-01 | Phase 2 | Complete |
+| CLI-02 | Phase 2 | Complete |
+| CLI-03 | Phase 2 | Complete |
 | CLI-04 | Phase 3 | Pending |
 | CLI-05 | Phase 3 | Pending |
-| CLI-06 | Phase 2 | Pending |
+| CLI-06 | Phase 2 | Complete |
 | DIST-01 | Phase 5 | Pending |
 | DIST-02 | Phase 5 | Pending |
 | DIST-03 | Phase 5 | Pending |
