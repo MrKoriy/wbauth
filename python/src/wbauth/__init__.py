@@ -3,6 +3,7 @@
 Phase 1 (current): identity + signer + JWKS + CLI keygen.
 Phase 2: HTTP-client adapters + policy inspector.
 """
+from .adapters import WebBotAuth, WebBotAuthAdapter, attach_signing
 from .identity import Identity, KeyPair
 from .normalized_request import NormalizedRequest
 from .signer import SignatureHeaders, sign
@@ -14,6 +15,9 @@ __all__ = [
     "KeyPair",
     "NormalizedRequest",
     "SignatureHeaders",
+    "WebBotAuth",
+    "WebBotAuthAdapter",
     "__version__",
+    "attach_signing",
     "sign",
 ]
