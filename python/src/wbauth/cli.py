@@ -103,6 +103,45 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Emit the full SitePolicy as JSON to stdout (machine-readable).",
     )
 
+    # ---- verify (Phase 2, CLI-03) ------------------------------------------
+    ver = sub.add_parser(
+        "verify",
+        help="Run Cloudflare research-verifier conformance check.",
+        description=(
+            "Sign a probe request with the RFC 9421 Appendix B.1.4 test "
+            "key and POST it to Cloudflare's open-spec research verifier "
+            "(per L-04). Reports pass/fail per D-25: 0=full pass, "
+            "1=partial pass with warnings, 2=verifier rejection. v1 ALWAYS "
+            "uses the test key (open question #5) — register in Cloudflare's "
+            "verified-bots program for verification against your own key "
+            "(Phase 3+)."
+        ),
+    )
+    ver.add_argument(
+        "--domain",
+        required=True,
+        help=(
+            "Domain to verify (informational in v1; the actual probe targets "
+            "Cloudflare's research verifier per L-04 and is independent of "
+            "this value). Phase 3 will wire --domain to a domain-specific "
+            "verifier path after directory registration."
+        ),
+    )
+    ver.add_argument(
+        "--identity",
+        default=None,
+        help=(
+            "Path to identity key. RESERVED for Phase 3 — v1 always uses "
+            "the RFC 9421 test key against the research verifier; passing "
+            "this in v1 prints a warning and uses the test key anyway."
+        ),
+    )
+    ver.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON to stdout (strips raw signature material).",
+    )
+
     return parser
 
 
@@ -181,6 +220,68 @@ def _dispatch_inspect(args: argparse.Namespace) -> int:
     return {"allowed": 0, "restricted": 1, "forbidden": 2}.get(policy.verdict, 3)
 
 
+# ---------- verify handler (CLI-03, D-25) ----------
+
+# T-02-03-02: keys to STRIP from `--json` output. The raw signed-header
+# values are useful in the daily-cron failure diagnostic (run() in
+# cloudflare_debug.py prints them on FAIL) but must never reach `wbauth
+# verify --json` consumers — log shippers / dashboards would happily
+# index a header that proves a Web Bot Auth signature against the test key.
+_VERIFY_JSON_STRIP_KEYS = ("signature_input", "signature", "signature_agent")
+
+
+def _print_verify_human(result: dict) -> None:
+    """Pretty-print a `_probe_verifier` result to stdout in the
+    RESEARCH §"`wbauth verify --domain <domain>`" sample shape.
+
+    The "Identity" line surfaces the v1 caveat (test key) so users
+    immediately see why their `--identity` arg, if passed, was ignored.
+    """
+    print("Identity: test key (RFC 9421 Appendix B.1.4)")
+    print(f"Target:   {result['verifier_url']}")
+    print(f"Domain:   {result['domain']} (informational in v1)")
+    print("Probe:    GET /")
+    print(f"Result:   {'PASS' if result['result'] == 'pass' else 'FAIL'}")
+    print(f"  Status:  {result['status']}")
+    print(f"  Banner:  {result['banner']!r}")
+    print(f"  kid:     {result['kid']}")
+
+
+def _dispatch_verify(args: argparse.Namespace) -> int:
+    """CLI-03 + D-25 handler.
+
+    Open question #5 resolution: `--identity` is parsed but always ignored
+    in v1 — the Cloudflare research verifier only validates the RFC 9421
+    test key. We print a stderr warning so users see why their key wasn't
+    used, then proceed with the test key. The warning lands on stderr (not
+    stdout) so JSON-consuming pipelines aren't disrupted (CLI-06).
+    """
+    # Lazy import: keeps `wbauth keygen` (Phase 1) from paying the smoke-module
+    # import cost on every CLI invocation.
+    from ._smoke.cloudflare_debug import run_against_domain
+
+    if args.identity:
+        print(
+            "warning: --identity is reserved for Phase 3+ "
+            "(registered-key verification); v1 always uses the test key "
+            "against Cloudflare's research verifier",
+            file=sys.stderr,
+        )
+    try:
+        result = asyncio.run(run_against_domain(args.domain, args.identity))
+    except Exception as e:  # noqa: BLE001 — last-resort error path
+        print(f"error: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+
+    if args.json:
+        # T-02-03-02: strip raw signed-header values before serializing.
+        clean = {k: v for k, v in result.items() if k not in _VERIFY_JSON_STRIP_KEYS}
+        print(json.dumps(clean))
+    else:
+        _print_verify_human(result)
+    return result["exit_code"]
+
+
 def _dispatch_keygen(args: argparse.Namespace) -> int:
     """Phase-1 keygen handler. Preserved 1:1 from the Phase-1 cli.py.
 
@@ -216,7 +317,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _dispatch_keygen(args)
     if args.cmd == "inspect":
         return _dispatch_inspect(args)
-    # Future subcommands wired in Task 3 (verify).
+    if args.cmd == "verify":
+        return _dispatch_verify(args)
     return 1
 
 
