@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Identity & Signing
 
-- [ ] **IDENT-01**: Developer can generate Ed25519 keypair via Python API and CLI (`agentid keygen`); private key written with `0o600` permissions; loading refuses files with wider permissions
+- [ ] **IDENT-01**: Developer can generate Ed25519 keypair via Python API and CLI (`wbauth keygen`); private key written with `0o600` permissions; loading refuses files with wider permissions
 - [ ] **IDENT-02**: Developer can construct a long-lived `Identity` object that holds keypair + agent metadata (signature-agent URI, expected user-agent string)
 - [ ] **IDENT-03**: SDK signs an HTTP request via pure function `sign(NormalizedRequest, Identity) -> SignatureHeaders` producing valid RFC 9421 `Signature`, `Signature-Input`, and `Signature-Agent` headers with Web Bot Auth profile defaults (Ed25519, `tag="web-bot-auth"`, `expires = created + 60s`)
 - [ ] **IDENT-04**: Generated signatures pass byte-equal verification against `spec/test-vectors/` golden files (cross-language oracle for Python and TS parity)
@@ -50,13 +50,18 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DIR-07**: Hard spending caps configured on infrastructure ($20/month limit on directory hosting); abuse vectors (spam registrations, claimed-as-Google identity attempts) handled via blocklist + rate limit + manual review queue
 - [ ] **DIR-08**: End-to-end flow validated: register identity → sign HTTP request via SDK → Cloudflare debug endpoint confirms verification passes using the registered directory URL
 
+> **Naming:** CLI command renamed from the original-draft name to `wbauth` in Phase 1 Plan 02
+> per CONTEXT.md D-06 (public surface = `wbauth`) and consistency with the package name.
+> The package, the import path, and the CLI command are now all `wbauth`.
+> See git history of this file for the prior name; see Plan 01-02 SUMMARY for rationale.
+
 ### Command Line Interface
 
-- [ ] **CLI-01**: `agentid keygen [--output PATH]` generates Ed25519 keypair, writes private key with `0o600`, prints public JWK fingerprint
-- [ ] **CLI-02**: `agentid inspect <url>` runs the policy inspector and prints structured `SitePolicy` (machine-readable JSON via `--json`; human-readable summary by default with verdict + reasons)
-- [ ] **CLI-03**: `agentid verify --domain <domain>` runs Cloudflare's debug verifier against the user's identity and prints pass/fail per criterion (canonicalization, header presence, expiry window, signed components)
-- [ ] **CLI-04**: `agentid register --directory <url> --identity <path>` publishes identity to the hosted directory using the proof-of-ownership flow
-- [ ] **CLI-05**: `agentid serve [--port N]` runs a local self-hostable JWKS directory server (FastAPI) for users who don't want to depend on agentpassport.dev
+- [ ] **CLI-01**: `wbauth keygen [--output PATH]` generates Ed25519 keypair, writes private key with `0o600`, prints public JWK fingerprint
+- [ ] **CLI-02**: `wbauth inspect <url>` runs the policy inspector and prints structured `SitePolicy` (machine-readable JSON via `--json`; human-readable summary by default with verdict + reasons)
+- [ ] **CLI-03**: `wbauth verify --domain <domain>` runs Cloudflare's debug verifier against the user's identity and prints pass/fail per criterion (canonicalization, header presence, expiry window, signed components)
+- [ ] **CLI-04**: `wbauth register --directory <url> --identity <path>` publishes identity to the hosted directory using the proof-of-ownership flow
+- [ ] **CLI-05**: `wbauth serve [--port N]` runs a local self-hostable JWKS directory server (FastAPI) for users who don't want to depend on agentpassport.dev
 - [ ] **CLI-06**: All CLI commands return non-zero exit codes on failure and emit machine-readable errors to stderr
 
 ### Distribution & Documentation
