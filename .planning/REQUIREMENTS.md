@@ -131,13 +131,75 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be filled by roadmapper) | — | Pending |
+| IDENT-01 | Phase 1 | Pending |
+| IDENT-02 | Phase 1 | Pending |
+| IDENT-03 | Phase 1 | Pending |
+| IDENT-04 | Phase 1 | Pending |
+| IDENT-05 | Phase 1 | Pending |
+| IDENT-06 | Phase 1 | Pending |
+| IDENT-07 | Phase 1 | Pending |
+| IDENT-08 | Phase 1 | Pending |
+| ADAPT-01 | Phase 2 | Pending |
+| ADAPT-02 | Phase 2 | Pending |
+| ADAPT-03 | Phase 2 | Pending |
+| ADAPT-04 | Phase 4 | Pending |
+| ADAPT-05 | Phase 4 | Pending |
+| ADAPT-06 | Phase 2 | Pending |
+| ADAPT-07 | Phase 2 | Pending |
+| POLICY-01 | Phase 2 | Pending |
+| POLICY-02 | Phase 2 | Pending |
+| POLICY-03 | Phase 2 | Pending |
+| POLICY-04 | Phase 2 | Pending |
+| POLICY-05 | Phase 2 | Pending |
+| POLICY-06 | Phase 2 | Pending |
+| POLICY-07 | Phase 2 | Pending |
+| POLICY-08 | Phase 2 | Pending |
+| DIR-01 | Phase 3 | Pending |
+| DIR-02 | Phase 3 | Pending |
+| DIR-03 | Phase 3 | Pending |
+| DIR-04 | Phase 3 | Pending |
+| DIR-05 | Phase 3 | Pending |
+| DIR-06 | Phase 1 | Pending |
+| DIR-07 | Phase 3 | Pending |
+| DIR-08 | Phase 3 | Pending |
+| CLI-01 | Phase 2 | Pending |
+| CLI-02 | Phase 2 | Pending |
+| CLI-03 | Phase 2 | Pending |
+| CLI-04 | Phase 3 | Pending |
+| CLI-05 | Phase 3 | Pending |
+| CLI-06 | Phase 2 | Pending |
+| DIST-01 | Phase 5 | Pending |
+| DIST-02 | Phase 5 | Pending |
+| DIST-03 | Phase 5 | Pending |
+| DIST-04 | Phase 4 | Pending |
+| DIST-05 | Phase 4 | Pending |
+| DIST-06 | Phase 4 | Pending |
+| DIST-07 | Phase 4 | Pending |
+| DIST-08 | Phase 3 | Pending |
+| HARDEN-01 | Phase 5 | Pending |
+| HARDEN-02 | Phase 5 | Pending |
+| HARDEN-03 | Phase 5 | Pending |
+| HARDEN-04 | Phase 5 | Pending |
+| HARDEN-05 | Phase 5 | Pending |
+| HARDEN-06 | Phase 5 | Pending |
+| HARDEN-07 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 47 total
-- Mapped to phases: TBD (filled by roadmapper)
-- Unmapped: TBD
+- v1 requirements: 52 total (note: original document stated 47; actual count across IDENT-08 + ADAPT-07 + POLICY-08 + DIR-08 + CLI-06 + DIST-08 + HARDEN-07 = 52)
+- Mapped to phases: 52 / 52 (100%)
+- Unmapped: 0
+- Per-phase distribution:
+  - Phase 1 (Foundation & Cryptographic Root): 9 requirements (IDENT-01..08, DIR-06)
+  - Phase 2 (Python Adapters & Policy Inspector): 17 requirements (ADAPT-01,02,03,06,07; POLICY-01..08; CLI-01,02,03,06)
+  - Phase 3 (Hosted Directory & Cloudflare Submission): 10 requirements (DIR-01..05,07,08; CLI-04,05; DIST-08)
+  - Phase 4 (TypeScript SDK & Framework Integrations): 6 requirements (ADAPT-04,05; DIST-04,05,06,07)
+  - Phase 5 (Pre-Army Hardening, Docs & Launch): 10 requirements (DIST-01,02,03; HARDEN-01..07)
+
+**Notes on mapping rationale:**
+- DIR-06 (Russian payment card hosting confirmation) is in Phase 1, not Phase 3, because it is the Day-1 hosting blocker that determines whether the directory backend is Python-on-Fly.io or TypeScript-on-Cloudflare-Workers. Discovering this at directory-build time is fatal.
+- DIST-08 (Cloudflare verified-bot submission) is in Phase 3, not Phase 5, because the opaque review timeline means late submission = no proof by army leave. Filed on Day 1 of Phase 3.
+- ADAPT-04 and ADAPT-05 (TypeScript adapters) are in Phase 4 alongside framework demos, run in parallel with Phase 3 directory work via shared `spec/test-vectors/` contracts.
 
 ---
 *Requirements defined: 2026-05-03*
-*Last updated: 2026-05-03 after initial definition*
+*Last updated: 2026-05-03 — traceability filled by roadmapper*
