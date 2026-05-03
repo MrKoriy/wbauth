@@ -1,0 +1,16 @@
+name: Python
+on: [push, pull_request]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Sync workspace
+        run: uv sync --all-extras --dev --all-packages
+      - name: Lint (ruff)
+        run: uv run ruff check python/
+      - name: Type check (pyright)
+        run: uv run pyright python/
+      - name: Tests
+        run: uv run pytest python/tests/ -v
