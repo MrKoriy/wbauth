@@ -242,6 +242,36 @@ def test_inspect_json_serializes_errors_dict_with_type_and_message(capsys):
     }
 
 
+def test_inspect_json_serializes_httpx_status_error(capsys):
+    """Regression: --json must serialize Exception types whose __init__
+    has required keyword-only arguments (httpx.HTTPStatusError).
+
+    Verifier 02-VERIFICATION.md flagged that production usage of
+    `wbauth inspect <url> --json` crashed because `dataclasses.asdict()`
+    deepcopies all values, and httpx.HTTPStatusError requires
+    `request=` and `response=` kwargs at construction time. The previous
+    test suite used TimeoutError (deepcopy-safe) and missed this.
+    """
+    import httpx
+
+    request = httpx.Request("GET", "https://example.com/llms.txt")
+    response = httpx.Response(404, request=request)
+    err = {
+        "llms_txt": httpx.HTTPStatusError(
+            "404 Not Found", request=request, response=response
+        )
+    }
+    with patch(
+        "wbauth.cli.inspect",
+        return_value=_fake_policy("allowed", partial=True, errors=err),
+    ):
+        rc = main(["inspect", "https://example.com/", "--json"])
+    assert rc == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["errors"]["llms_txt"]["type"] == "HTTPStatusError"
+    assert "404 Not Found" in doc["errors"]["llms_txt"]["message"]
+
+
 def test_inspect_json_datetime_serializes_to_iso_string(capsys):
     """--json: fetched_at is a datetime → must serialize to a string (ISO 8601)."""
     with patch(

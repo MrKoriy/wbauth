@@ -151,22 +151,39 @@ def _build_parser() -> argparse.ArgumentParser:
 def _serialize_policy(policy: SitePolicy) -> dict:
     """Convert a SitePolicy to a JSON-serializable dict.
 
-    `dataclasses.asdict` walks nested frozen dataclasses but two fields
-    need custom handling:
+    Built field-by-field at the top level rather than via
+    ``dataclasses.asdict(policy)`` — ``asdict`` deepcopies every value,
+    and exception types like ``httpx.HTTPStatusError`` raise ``TypeError``
+    on deepcopy because their ``__init__`` requires keyword-only args.
+    Nested dataclasses (RobotsResult, AiTxtResult, etc.) are deepcopy-safe,
+    so ``asdict`` is fine for those individually.
 
-      - ``errors``: maps ``str -> Exception``. Exception isn't
-        JSON-serializable; we replace each value with
-        ``{"type": <class name>, "message": str(exc)}`` so consumers
-        can still introspect what went wrong.
-      - ``fetched_at``: a ``datetime``. ``json.dumps(default=str)``
-        in the caller turns it into the ISO-8601 string.
+    Field handling:
+
+      - ``errors``: ``dict[str, Exception]`` → ``{"type": cls_name, "message": str(exc)}``
+        per endpoint. Preserves introspectability; does not deepcopy the exception.
+      - ``fetched_at``: ``datetime`` — caller's ``json.dumps(default=str)``
+        renders it as ISO-8601.
     """
-    d = dataclasses.asdict(policy)
-    d["errors"] = {
-        name: {"type": type(exc).__name__, "message": str(exc)}
-        for name, exc in policy.errors.items()
+    return {
+        "url": policy.url,
+        "robots": dataclasses.asdict(policy.robots) if policy.robots is not None else None,
+        "ai_txt": dataclasses.asdict(policy.ai_txt) if policy.ai_txt is not None else None,
+        "llms_txt": dataclasses.asdict(policy.llms_txt) if policy.llms_txt is not None else None,
+        "signing_directory": (
+            dataclasses.asdict(policy.signing_directory)
+            if policy.signing_directory is not None
+            else None
+        ),
+        "verdict": policy.verdict,
+        "reasons": list(policy.reasons),
+        "partial": policy.partial,
+        "errors": {
+            name: {"type": type(exc).__name__, "message": str(exc)}
+            for name, exc in policy.errors.items()
+        },
+        "fetched_at": policy.fetched_at,
     }
-    return d
 
 
 def _print_human_summary(policy: SitePolicy) -> None:
