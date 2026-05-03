@@ -1,0 +1,100 @@
+# Roadmap: Agent Identity & Policy Toolkit
+
+## Overview
+
+Five phases ship a Python+TypeScript OSS toolkit that gives AI agents two superpowers in one import: signed identity (IETF Web Bot Auth via RFC 9421) and pre-flight site policy (robots.txt + ai.txt + llms.txt + .well-known/* fan-out). The build sequence is dictated by a single non-negotiable critical path — the Python signer must pass Cloudflare's debug verifier before any adapter, framework demo, or directory work begins, because cryptographic correctness gates everything downstream. The journey starts with a Day-1 hosting card test (highest-uncertainty external blocker), proceeds through the cryptographic root, then expands into the policy inspector and HTTP-client adapters, then ships the public directory backend and initiates Cloudflare's verified-bot submission (the longest external dependency), runs the TypeScript SDK and framework demos in parallel with directory work via shared test-vector contracts, and ends with a hardening phase whose entire purpose is making the project survive 6+ months unmaintained while the maintainer is on army leave.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Foundation & Cryptographic Root** - Day-1 hosting test, monorepo scaffold, test vectors, Python signer passing Cloudflare debug verifier
+- [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, agentid CLI core
+- [ ] **Phase 3: Hosted Directory & Cloudflare Submission** - FastAPI directory backend at agentpassport.dev, end-to-end registration→sign→verify, Cloudflare verified-bot submission filed
+- [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos, upstream integration PRs
+- [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch
+
+## Phase Details
+
+### Phase 1: Foundation & Cryptographic Root
+**Goal**: Establish the project skeleton on confirmed hosting and prove that the Python signer produces signatures Cloudflare accepts — the cryptographic root that gates every downstream feature.
+**Depends on**: Nothing (first phase)
+**Requirements**: IDENT-01, IDENT-02, IDENT-03, IDENT-04, IDENT-05, IDENT-06, IDENT-07, IDENT-08, DIR-06
+**Success Criteria** (what must be TRUE):
+  1. Russian payment card is confirmed working on the chosen hosting provider (Fly.io primary; Railway or Cloudflare Workers+D1 fallback if rejected) and the project domain is registered with auto-renewal enabled for >18 months — this is a Day-1 blocker before any code is written
+  2. A developer can run `agentid keygen` and get an Ed25519 keypair written with `0o600` permissions, with the loader refusing wider-permission files; `__repr__` and `__str__` of `Identity` return REDACTED instead of leaking key material
+  3. The pure function `sign(NormalizedRequest, Identity) -> SignatureHeaders` produces RFC 9421 `Signature`, `Signature-Input`, and `Signature-Agent` headers with Web Bot Auth defaults (Ed25519, `tag="web-bot-auth"`, `expires = created + 60s`) and JWKS export uses `kid = base64url(sha256(JWK))` per RFC 7638
+  4. Generated signatures pass byte-equal verification against `spec/test-vectors/` (≥5 golden vectors) AND Cloudflare's debug verifier endpoint accepts a request signed by our SDK in <2 seconds end-to-end (CI smoke test plus weekly scheduled run)
+  5. Multi-key Identity supports rotation lifecycle (active + retiring key with overlap window); old key remains usable until explicit retirement
+**Plans**: TBD (estimate 2-3 plans)
+**Parallelism note**: Day-1 hosting test is a strict serial blocker. After hosting confirmed, the monorepo scaffold (`spec/`, `python/`, `typescript/`, `directory/`, `docs/`, `.github/workflows/`) and first 5 test vectors can be authored in parallel with signer/identity implementation by sub-agents.
+
+### Phase 2: Python Adapters & Policy Inspector
+**Goal**: Make the signer drop-in usable from real Python HTTP clients AND deliver the policy half (`inspect(url) -> SitePolicy` with verdict engine) so the project's core value claim ("identity + policy in one import") is demonstrable end-to-end in Python.
+**Depends on**: Phase 1 (signer + test vectors locked)
+**Requirements**: ADAPT-01, ADAPT-02, ADAPT-03, ADAPT-06, ADAPT-07, POLICY-01, POLICY-02, POLICY-03, POLICY-04, POLICY-05, POLICY-06, POLICY-07, POLICY-08, CLI-01, CLI-02, CLI-03, CLI-06
+**Success Criteria** (what must be TRUE):
+  1. A user can write `httpx.Client(auth=WebBotAuth(identity)).get(url)` (or use the `requests` transport adapter or `attach_signing(page, identity)` for Playwright) and the outgoing request carries valid Web Bot Auth signatures verified by Phase 1 test vectors; each adapter file is ≤50 LOC of glue with complexity living in the pure signer
+  2. `await inspect(url)` returns a frozen `SitePolicy` dataclass with parallel-fetched robots.txt (via `protego`, RFC 9309-compliant), ai.txt v1.1.1, llms.txt (labeled `enforcement: "voluntary"`), and `.well-known/http-message-signatures-directory`; partial failures are isolated (`return_exceptions=True`, `partial: bool`, `errors: dict`) with 3s per-endpoint timeout
+  3. `policy.verdict` returns `"allowed" | "restricted" | "forbidden"` with `reasons: list[str]` from a deterministic rule engine (robots authoritative, ai.txt restriction → restricted, signing-required → restricted with mitigation hint); HTML 200 on `/robots.txt` raises explicit parse error rather than silently returning "allowed"
+  4. Per-host LRU cache honors `Cache-Control`/`ETag` (defaults: robots.txt 24h, ai.txt 1h, llms.txt 24h) and operates entirely in-process with zero hard cloud dependency — `inspect(url)` works without agentpassport.dev
+  5. `agentid keygen`, `agentid inspect <url>` (with `--json`), and `agentid verify --domain <domain>` (runs Cloudflare debug verifier and prints pass/fail per criterion) all work from the command line, returning non-zero exit codes on failure with machine-readable errors on stderr
+**Plans**: TBD (estimate 3 plans)
+**Parallelism note**: Adapters (ADAPT-01/02/03) and policy inspector (POLICY-01-08) are independent and can be developed by separate sub-agents in parallel — both depend only on Phase 1 outputs (signer, test vectors). CLI commands stitch on top once each module lands. Run a 1-hour spike on Browser Use Playwright `page.route()` accessibility on Day 1 of this phase before committing to adapter design (research flag from SUMMARY.md).
+
+### Phase 3: Hosted Directory & Cloudflare Submission
+**Goal**: Stand up the public `agentpassport.dev` directory backend so verifiers (Cloudflare, AWS, Akamai) can fetch JWKS for any registered agent, prove the full register→sign→verify flow end-to-end, and file the Cloudflare verified-bot submission whose opaque review timeline makes it the hardest external dependency to start late.
+**Depends on**: Phase 1 (verifier code path reused for proof-of-key-ownership)
+**Requirements**: DIR-01, DIR-02, DIR-03, DIR-04, DIR-05, DIR-07, DIR-08, CLI-04, CLI-05, DIST-08
+**Success Criteria** (what must be TRUE):
+  1. A user can register an agent via `agentid register --directory https://agentpassport.dev --identity <path>` using proof-of-key-ownership (server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports — no email, no OAuth, no third-party identity provider)
+  2. `GET /.well-known/http-message-signatures-directory/{id}` returns JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed; `/keys/<thumbprint>` is CDN-cached with `Cache-Control: immutable`; per-IP registration rate limit (10/day) and reserved-name blocklist (google, openai, anthropic, cloudflare, microsoft, meta, apple, amazon) prevent abuse
+  3. End-to-end flow validated live: register an identity → sign an HTTP request via the SDK with that identity's directory URL → Cloudflare debug endpoint confirms verification passes using the registered directory URL
+  4. A nightly snapshot job mirrors the full directory to `/static/all.json` and to a GitHub Pages mirror as disaster recovery (works even if the backend is down); hard spending caps ($20/month) are configured on infrastructure
+  5. Cloudflare verified-bot submission is **filed on Day 1 of this phase** (not Day-last) with the reference demo bot registered both in our own directory AND submitted to Cloudflare's verified-bot directory; `agentid serve [--port N]` runs a local self-hostable JWKS directory server for users who don't want to depend on agentpassport.dev
+**Plans**: TBD (estimate 2-3 plans)
+**Parallelism note**: Filing the Cloudflare submission is a Day-1-of-phase external action that runs in the background through the rest of the project (review timeline measured in weeks). Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
+
+### Phase 4: TypeScript SDK & Framework Integrations
+**Goal**: Ship feature-parity TypeScript SDK guaranteed byte-equal to Python via shared test vectors, plus tested integration recipes for the three target frameworks (Browser Use, Stagehand, Playwright+OpenAI Agents SDK), and submit upstream PRs to those frameworks' `examples/` directories.
+**Depends on**: Phase 1 (test vectors locked) — runs largely in parallel with Phase 3
+**Requirements**: ADAPT-04, ADAPT-05, DIST-04, DIST-05, DIST-06, DIST-07
+**Success Criteria** (what must be TRUE):
+  1. A TypeScript user can write `const signedFetch = createSignedFetch(identity); await signedFetch(url)` and the produced `Signature`/`Signature-Input`/`Signature-Agent` headers are byte-identical to Python's output for the same inputs (Vitest tests consume the same `spec/test-vectors/` JSON files as pytest)
+  2. A TypeScript user can call `applyTo(page, identity)` against a Playwright page and outgoing requests are signed via `page.route("**/*", handler)` (NOT static `set_extra_http_headers`) — mirroring Python adapter behavior
+  3. `examples/browser_use_demo.py` shows a verified end-to-end flow: agent fails on a Cloudflare-protected site without the SDK, then passes after adding 3 lines of SDK code; same pattern works for `examples/stagehand_demo.ts` and `examples/openai_agents_demo.py`
+  4. Pull requests are submitted to the upstream `examples/` directories of Browser Use, Stagehand, and mcp-agent adding our SDK as a first-class integration option; PR links recorded in the project README
+  5. Public TypeScript API uses idiomatic camelCase (`Identity.loadOrGenerate()`, `signatureInput`) while JSON wire format stays snake_case to follow the IETF draft — both languages share the same on-disk JSON keyfile format so users can switch SDKs with the same key
+**Plans**: TBD (estimate 2 plans)
+**Parallelism note**: This is the project's primary time-leverage point. The test-vector contract from Phase 1 makes safe agent delegation possible — sub-agent(s) build the TS SDK while the human focuses on directory backend (Phase 3). Run a brief spike on Day 1 of this phase to verify `web-bot-auth` npm vs `http-message-sig` API surface fit before committing to the wrapper design.
+
+### Phase 5: Pre-Army Hardening, Docs & Launch
+**Goal**: Make the project actually survive 6+ months unmaintained — documentation that answers "is this abandoned?" with content not activity, automated systems that catch dependency rot and Cloudflare-spec drift, frozen-branch guarantees, and the public launch (Loom demo, README polish, distribution).
+**Depends on**: Phase 4 (all SDK + adapter + directory + demos shipping)
+**Requirements**: DIST-01, DIST-02, DIST-03, HARDEN-01, HARDEN-02, HARDEN-03, HARDEN-04, HARDEN-05, HARDEN-06, HARDEN-07
+**Success Criteria** (what must be TRUE):
+  1. A developer landing on `https://agentpassport.dev` (or the GitHub README) understands the project in ≤30 seconds — GIF demo at top, code-before-prose, native-English review completed; the 60-second Loom demo (agent fails on Cloudflare → installs SDK → 3 lines added → request passes) is embedded on landing and README
+  2. Astro Starlight docs on GitHub Pages contain quickstart, API reference, "why this exists", and FAQ — builds reproducibly years later with `package-lock.json` committed; PyPI publishing uses OIDC trusted publishers (no token to rotate); npm publishing uses provenance from GitHub Actions
+  3. A monthly scheduled CI canary verifies "still installs cleanly"; a daily conformance canary (GitHub Action → Cloudflare debug) opens a GitHub issue and posts a Discord alert on failure — both run without manual intervention; Dependabot is configured (not Renovate — fewer PRs during absence)
+  4. A `v1.x-frozen` git branch exists with a 12-month compatibility promise documented in `MAINTAINER_AWAY.md` at the repo root (expected return date, contact for moderators); a pinned status issue at the top of the repo explains the maintainer absence and routes urgent security reports; CONTRIBUTING.md documents the triage path
+  5. 2FA backup codes for GitHub, PyPI, npm, and the domain registrar are printed and stored offline with a trusted party; designated repo moderator(s) added with triage permissions; domain auto-renewal verified to cover >18 months; DNS, TLS cert (Let's Encrypt auto-renew), CDN config all set to auto-mode with no manual touch points
+**Plans**: TBD (estimate 2 plans)
+**UI hint**: yes
+**Parallelism note**: Docs writing (DIST-01/02/03) and hardening tasks (HARDEN-01-07) are independent — sub-agents can draft the Astro Starlight site, README polish, and Loom storyboard in parallel with the human configuring OIDC publishers, Dependabot, frozen branch, and 2FA backup printing.
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in parallel as soon as Phase 1's test vectors are locked) → 4 → 5
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Foundation & Cryptographic Root | 0/TBD | Not started | - |
+| 2. Python Adapters & Policy Inspector | 0/TBD | Not started | - |
+| 3. Hosted Directory & Cloudflare Submission | 0/TBD | Not started | - |
+| 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |
+| 5. Pre-Army Hardening, Docs & Launch | 0/TBD | Not started | - |
