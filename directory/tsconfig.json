@@ -7,8 +7,19 @@
     "noImplicitAny": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["@cloudflare/workers-types"],
+    // Workers runtime + node types for tests (vitest-pool-workers exposes
+    // `cloudflare:test` and node:crypto/Buffer for setup helpers).
+    "types": [
+      "@cloudflare/workers-types",
+      "@cloudflare/vitest-pool-workers/types",
+      "node"
+    ],
     "lib": ["ES2022"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts",
+    "env.d.ts"
+  ]
 }
