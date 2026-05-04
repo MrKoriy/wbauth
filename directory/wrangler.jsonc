@@ -1,12 +1,17 @@
 {
-  "name": "wbauth-day1-test",
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wbauth",
   "main": "src/index.ts",
   "compatibility_date": "2026-05-01",
+  "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "wbauth-day1-test",
-      "database_id": "13e5aebd-4999-4333-9a23-7fd7fb75549a"
+      "database_name": "wbauth-directory",
+      "database_id": "PLACEHOLDER_FILLED_AFTER_D1_CREATE",
+      "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "observability": { "enabled": true }
+  // Secrets via: npx wrangler secret put DIRECTORY_PRIVATE_JWK
 }
