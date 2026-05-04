@@ -8,7 +8,7 @@
     {
       "binding": "DB",
       "database_name": "wbauth-directory",
-      "database_id": "PLACEHOLDER_FILLED_AFTER_D1_CREATE",
+      "database_id": "e9bd675b-da95-4ee5-aecf-58c326cfe766",
       "migrations_dir": "migrations"
     }
   ],
