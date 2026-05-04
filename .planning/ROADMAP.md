@@ -14,9 +14,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & Cryptographic Root** - Day-1 hosting test, monorepo scaffold, test vectors, Python signer passing Cloudflare debug verifier
 - [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, wbauth CLI core
-- [ ] **Phase 3: Hosted Directory & Cloudflare Submission** - FastAPI directory backend at agentpassport.dev, end-to-end registration→sign→verify, Cloudflare verified-bot submission filed
+- [ ] **Phase 3: Hosted Directory & Cloudflare Submission** - Cloudflare Workers + D1 directory at `wbauth.silov801.workers.dev`, end-to-end registration→sign→verify (DIST-08 moved to Phase 5 — Cloudflare submission requires public GitHub repo which depends on D-08 GitHub-org choice)
 - [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos, upstream integration PRs
-- [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch
+- [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch + Cloudflare verified-bot submission (DIST-08)
 
 ## Phase Details
 
@@ -54,17 +54,21 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Parallelism note**: Plans 02-01 and 02-02 share zero code dependencies (adapters wrap signer; inspector fetches HTTP without signer involvement) but both touch `python/src/wbauth/__init__.py` and `python/pyproject.toml` — wave-purity rule forces 02-02 to wave 2 (sequential after 02-01). 02-03 is wave 3 (depends on both prior plans). Browser Use Playwright spike was DROPPED per CONTEXT.md D-13 — async page.route confidence HIGH; Phase 4 demo is the live verification.
 
 ### Phase 3: Hosted Directory & Cloudflare Submission
-**Goal**: Stand up the public `agentpassport.dev` directory backend so verifiers (Cloudflare, AWS, Akamai) can fetch JWKS for any registered agent, prove the full register→sign→verify flow end-to-end, and file the Cloudflare verified-bot submission whose opaque review timeline makes it the hardest external dependency to start late.
+**Goal**: Stand up the public agent identity directory at `https://wbauth.silov801.workers.dev` (Cloudflare Worker + D1) so verifiers can fetch JWKS for any registered agent, prove the full register→sign→verify flow end-to-end against Cloudflare's research verifier, and ship the local `wbauth serve` JWKS host for self-hosters.
 **Depends on**: Phase 1 (verifier code path reused for proof-of-key-ownership)
-**Requirements**: DIR-01, DIR-02, DIR-03, DIR-04, DIR-05, DIR-07, DIR-08, CLI-04, CLI-05, DIST-08
+**Requirements**: DIR-01, DIR-02, DIR-03, DIR-04, DIR-05, DIR-07, DIR-08, CLI-04, CLI-05
+**Scope change**: DIST-08 (Cloudflare verified-bot submission) MOVED from Phase 3 to Phase 5 per 03-CONTEXT.md D-53. Cloudflare's submission review requires a public GitHub repo URL; D-08 (GitHub org/account choice) was deferred to be resolved at `git remote add` time. Phase 5 bundles all "go-public" actions (resolve D-08, push to GitHub, file Cloudflare submission, register reference bot via the directory we built in Phase 3).
 **Success Criteria** (what must be TRUE):
-  1. A user can register an agent via `wbauth register --directory https://agentpassport.dev --identity <path>` using proof-of-key-ownership (server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports — no email, no OAuth, no third-party identity provider)
-  2. `GET /.well-known/http-message-signatures-directory/{id}` returns JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed; `/keys/<thumbprint>` is CDN-cached with `Cache-Control: immutable`; per-IP registration rate limit (10/day) and reserved-name blocklist (google, openai, anthropic, cloudflare, microsoft, meta, apple, amazon) prevent abuse
-  3. End-to-end flow validated live: register an identity → sign an HTTP request via the SDK with that identity's directory URL → Cloudflare debug endpoint confirms verification passes using the registered directory URL
-  4. A nightly snapshot job mirrors the full directory to `/static/all.json` and to a GitHub Pages mirror as disaster recovery (works even if the backend is down); hard spending caps ($20/month) are configured on infrastructure
-  5. Cloudflare verified-bot submission is **filed on Day 1 of this phase** (not Day-last) with the reference demo bot registered both in our own directory AND submitted to Cloudflare's verified-bot directory; `wbauth serve [--port N]` runs a local self-hostable JWKS directory server for users who don't want to depend on agentpassport.dev
-**Plans**: TBD (estimate 2-3 plans)
-**Parallelism note**: Filing the Cloudflare submission is a Day-1-of-phase external action that runs in the background through the rest of the project (review timeline measured in weeks). Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
+  1. A user can register an agent via `wbauth register --directory https://wbauth.silov801.workers.dev --identity <path>` using two-step proof-of-key-ownership (server issues nonce, caller signs with claimed private key, server verifies via the same `web-bot-auth` 0.1.3 verify path the SDK exports — no email, no OAuth, no third-party identity provider)
+  2. `GET /.well-known/http-message-signatures-directory/{kid}` returns JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed (Worker holds its own Ed25519 keypair as `DIRECTORY_PRIVATE_JWK` secret); responses are CDN-cached with `Cache-Control: public, max-age=300`; per-IP registration rate limit (10/day) and reserved-name blocklist (google, openai, anthropic, cloudflare, microsoft, meta, apple, amazon, aws, github, stripe, shopify) prevent abuse
+  3. End-to-end flow validated live: register an identity → sign an HTTP request via the SDK with that identity's directory URL → Cloudflare research verifier confirms verification passes (manual run via `python/scripts/e2e_phase3.py`, NOT in CI to avoid spamming our own directory)
+  4. A nightly snapshot job mirrors the full directory to `/static/all.json` and to a GitHub Pages mirror as disaster recovery (workflow file ships with cron commented out + `workflow_dispatch` for ad-hoc runs; cron enabled in Phase 5 when D-08 GitHub remote resolves); zero billing possible — Workers Free tier hard-capped at 100k req/day, D1 Free tier 5M reads/day
+  5. `wbauth serve [--port N] --jwks <path>` runs a local self-hostable static JWKS server (~30 LOC stdlib `http.server`) for users who don't want to depend on the hosted directory; `wbauth keygen --jwks-output <path>` extension lets self-hosters export the JWKS file
+**Plans**: 3 plans
+- [ ] 03-01-PLAN.md — Hono+D1 Worker (challenge/submit/JWKS read/agents list/snapshot endpoint), blocklist, rate limit, response signing, vitest tests, secret provisioning, live deploy to wbauth.silov801.workers.dev (DIR-01, DIR-02, DIR-03, DIR-04, DIR-07)
+- [ ] 03-02-PLAN.md — GitHub Action snapshot workflow (cron disabled), Python `wbauth register` CLI, `wbauth serve` ≤30 LOC static JWKS server, `wbauth keygen --jwks-output` extension (DIR-05, CLI-04, CLI-05)
+- [ ] 03-03-PLAN.md — End-to-end manual test script (register → fetch JWKS → sign → Cloudflare research verifier 200 OK), E2E-RESULT.md write, exit-criterion checkpoint (DIR-08)
+**Parallelism note**: Plans 03-01 and 03-02 are sequential because 03-02's E2E `wbauth register` smoke and 03-03's exit script both require the live Worker URL and live D1. Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
 
 ### Phase 4: TypeScript SDK & Framework Integrations
 **Goal**: Ship feature-parity TypeScript SDK guaranteed byte-equal to Python via shared test vectors, plus tested integration recipes for the three target frameworks (Browser Use, Stagehand, Playwright+OpenAI Agents SDK), and submit upstream PRs to those frameworks' `examples/` directories.
@@ -80,15 +84,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Parallelism note**: This is the project's primary time-leverage point. The test-vector contract from Phase 1 makes safe agent delegation possible — sub-agent(s) build the TS SDK while the human focuses on directory backend (Phase 3). Run a brief spike on Day 1 of this phase to verify `web-bot-auth` npm vs `http-message-sig` API surface fit before committing to the wrapper design.
 
 ### Phase 5: Pre-Army Hardening, Docs & Launch
-**Goal**: Make the project actually survive 6+ months unmaintained — documentation that answers "is this abandoned?" with content not activity, automated systems that catch dependency rot and Cloudflare-spec drift, frozen-branch guarantees, and the public launch (Loom demo, README polish, distribution).
+**Goal**: Make the project actually survive 6+ months unmaintained — documentation that answers "is this abandoned?" with content not activity, automated systems that catch dependency rot and Cloudflare-spec drift, frozen-branch guarantees, and the public launch (Loom demo, README polish, distribution). Also resolves D-08 (GitHub org choice) and files the Cloudflare verified-bot submission (DIST-08, moved from Phase 3 per 03-CONTEXT.md D-53).
 **Depends on**: Phase 4 (all SDK + adapter + directory + demos shipping)
-**Requirements**: DIST-01, DIST-02, DIST-03, HARDEN-01, HARDEN-02, HARDEN-03, HARDEN-04, HARDEN-05, HARDEN-06, HARDEN-07
+**Requirements**: DIST-01, DIST-02, DIST-03, DIST-08, HARDEN-01, HARDEN-02, HARDEN-03, HARDEN-04, HARDEN-05, HARDEN-06, HARDEN-07
 **Success Criteria** (what must be TRUE):
-  1. A developer landing on `https://agentpassport.dev` (or the GitHub README) understands the project in ≤30 seconds — GIF demo at top, code-before-prose, native-English review completed; the 60-second Loom demo (agent fails on Cloudflare → installs SDK → 3 lines added → request passes) is embedded on landing and README
+  1. A developer landing on the GitHub README understands the project in ≤30 seconds — GIF demo at top, code-before-prose, native-English review completed; the 60-second Loom demo (agent fails on Cloudflare → installs SDK → 3 lines added → request passes) is embedded on landing and README
   2. Astro Starlight docs on GitHub Pages contain quickstart, API reference, "why this exists", and FAQ — builds reproducibly years later with `package-lock.json` committed; PyPI publishing uses OIDC trusted publishers (no token to rotate); npm publishing uses provenance from GitHub Actions
   3. A monthly scheduled CI canary verifies "still installs cleanly"; a daily conformance canary (GitHub Action → Cloudflare debug) opens a GitHub issue and posts a Discord alert on failure — both run without manual intervention; Dependabot is configured (not Renovate — fewer PRs during absence)
   4. A `v1.x-frozen` git branch exists with a 12-month compatibility promise documented in `MAINTAINER_AWAY.md` at the repo root (expected return date, contact for moderators); a pinned status issue at the top of the repo explains the maintainer absence and routes urgent security reports; CONTRIBUTING.md documents the triage path
   5. 2FA backup codes for GitHub, PyPI, npm, and the domain registrar are printed and stored offline with a trusted party; designated repo moderator(s) added with triage permissions; domain auto-renewal verified to cover >18 months; DNS, TLS cert (Let's Encrypt auto-renew), CDN config all set to auto-mode with no manual touch points
+  6. **DIST-08**: Reference demo bot registered in `wbauth.silov801.workers.dev` directory (using Phase 3's `wbauth register` CLI) AND submission filed to Cloudflare's verified-bot directory (filed on Day 1 of Phase 5 due to opaque review timeline; approval by army leave is best-effort). Phase 3 snapshot workflow's `cron` is enabled in this phase once GitHub remote exists.
 **Plans**: TBD (estimate 2 plans)
 **UI hint**: yes
 **Parallelism note**: Docs writing (DIST-01/02/03) and hardening tasks (HARDEN-01-07) are independent — sub-agents can draft the Astro Starlight site, README polish, and Loom storyboard in parallel with the human configuring OIDC publishers, Dependabot, frozen branch, and 2FA backup printing.
@@ -102,6 +107,6 @@ Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in paralle
 |-------|----------------|--------|-----------|
 | 1. Foundation & Cryptographic Root | 4/4 | Complete | 2026-05-03 |
 | 2. Python Adapters & Policy Inspector | 1/3 | In Progress|  |
-| 3. Hosted Directory & Cloudflare Submission | 0/TBD | Not started | - |
+| 3. Hosted Directory & Cloudflare Submission | 0/3 | Not started | - |
 | 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |
 | 5. Pre-Army Hardening, Docs & Launch | 0/TBD | Not started | - |
