@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
-status: completed
-stopped_at: Phase 3 context gathered
-last_updated: "2026-05-04T17:40:38.328Z"
-last_activity: 2026-05-04
+status: executing
+stopped_at: Phase 3 Plan 01 complete (Worker live + smoke green)
+last_updated: "2026-05-04T22:30:00.000Z"
+last_activity: 2026-05-04 -- Phase 03 Plan 01 complete (Worker deployed + smoke-tested)
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_plans: 10
+  completed_plans: 8
+  percent: 80
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** AI-агенты получают идентичность и знают свои права на сайте — до того, как сделают первый запрос. Если ничего другое не работает, эти две вещи (signed identity + pre-flight policy) должны работать в одну строку импорта.
-**Current focus:** Phase 02 — python-adapters-policy-inspector
+**Current focus:** Phase 03 — hosted-directory-cloudflare-submission
 
 ## Current Position
 
-Phase: 02 (python-adapters-policy-inspector) — COMPLETE
+Phase: 03 (hosted-directory-cloudflare-submission) — EXECUTING
 Next phase: 03 (Hosted Directory & Cloudflare Submission)
-Plan: 3 of 3 (Phase 2 complete)
-Status: Phase 2 done; ready to start Phase 3 context gathering
-Last activity: 2026-05-04
+Plan: 2 of 3 (next: 03-02 register CLI + snapshot job + serve)
+Status: Executing Phase 03 (Plan 03-01 complete; Worker live at https://wbauth.silov801.workers.dev)
+Last activity: 2026-05-04 -- Phase 03 Plan 01 complete (Worker deployed + smoke-tested)
 
-Progress: [██████████] 100% (3/3 plans complete in Phase 2)
+Progress: [███▎······] 33% (1/3 plans complete in Phase 3)
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [██████████] 100% (3/3 plans complete in Phase 2)
 | Phase 02-python-adapters-policy-inspector P01 | 30min | 3 tasks | 10 files |
 | Phase 02-python-adapters-policy-inspector P02 | 30min | 3 tasks + 2 deviations | 24 created, 1 modified |
 | Phase 02-python-adapters-policy-inspector P03 | 25min | 3 tasks + 1 deviation | 4 created, 3 modified, 1 renamed |
+| Phase 03-hosted-directory-cloudflare-submission P01 | ~120min | 3 tasks (incl. human-action deploy gate) + 0 deviations | 18 created, 3 modified, 1 deleted |
 
 ## Accumulated Context
 
@@ -96,6 +97,10 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase ?]: Adapters use direct submodule imports (wbauth.signer, wbauth.normalized_request) to avoid circular import via wbauth/__init__.py re-exports
 - [Phase ?]: Content-Digest auto-computation lives in wbauth.adapters._utils.ensure_content_digest (not in signer); fulfills Phase-1 signer's TODO for POST/PUT/PATCH body requests
 - [Phase ?]: Plan 02-01 frontloaded all Phase-2 runtime + dev deps (cachetools, playwright, protego, requests; pytest-httpx, responses) so 02-02 stays append-only on pyproject.toml
+- [Phase 3 Plan 01]: Worker `wbauth` deployed live at https://wbauth.silov801.workers.dev (version 4fce28b9-cf13-4713-98f1-5efef6f41d43); D1 `wbauth-directory` (e9bd675b-da95-4ee5-aecf-58c326cfe766) seeded with 3 migrations; DIRECTORY_PRIVATE_JWK provisioned via piped stdin (no key on disk). Directory's published kid: UeCLA_Q47BCqq9eB6T7gPaLnVJ1gpNyDI4Vi4bUanZw.
+- [Phase 3 Plan 01]: Hono 4.12.16 chosen as Worker framework (D-54); managed wrangler migrations under directory/migrations/ replace Phase-1 schema.sql (D-55); rotation procedure documented in directory/README.md (D-56); module organization src/{routes/,blocklist,ratelimit,signing,schemas,env,index} flat-with-routes-subdir (D-57).
+- [Phase 3 Plan 01]: DIRECTORY_PRIVATE_JWK stored as JSON-stringified JWK (kty,crv,kid,d,x) — NOT PKCS8 PEM (Open Question #2 resolution); web-bot-auth/crypto.signerFromJWK accepts JWK natively, sidesteps Workers WebCrypto Ed25519 PKCS8 import ambiguity.
+- [Phase 3 Plan 01]: Blocklist enforcement at /register/submit only (NOT /register/challenge) — challenge body schema doesn't carry client_name; per-IP rate limit (10/IP/day shared across challenge+submit) bounds enumeration. Documented in 03-01-SUMMARY.md as design choice; soft-gap noted for verifier reassessment.
 
 ### Pending Todos
 
@@ -118,7 +123,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-04T17:40:38.320Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-hosted-directory-cloudflare-submission/03-CONTEXT.md
-Next plan: Phase 2 plans not yet drafted; orchestrator should run `/gsd-plan-phase 02-python-adapters-and-policy-inspector` next.
+Last session: 2026-05-04T22:30:00.000Z
+Stopped at: Phase 3 Plan 01 complete (Worker live + smoke green)
+Resume file: .planning/phases/03-hosted-directory-cloudflare-submission/03-02-PLAN.md
+Next plan: 03-02 (register CLI + snapshot job + serve). Live URL contract: https://wbauth.silov801.workers.dev. Hand-off notes in 03-01-SUMMARY.md.

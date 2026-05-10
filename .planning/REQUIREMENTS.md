@@ -41,13 +41,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Hosted Directory (agentpassport.dev)
 
-- [ ] **DIR-01**: FastAPI backend exposes `POST /register` accepting Signature Agent Card (per draft-meunier-webbotauth-registry-01); fields are mostly optional with ≥1 required (`client_name`, `client_uri`, `contacts`, `expected-user-agent`, `keys`, etc.)
-- [ ] **DIR-02**: Registration uses proof-of-key-ownership flow: server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports; no email, no OAuth, no third-party identity provider
-- [ ] **DIR-03**: Backend serves `GET /.well-known/http-message-signatures-directory/{id}` returning JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed
-- [ ] **DIR-04**: Read endpoints CDN-cached with `Cache-Control: immutable` on `/keys/<thumbprint>`; per-IP rate limiting on registration (10/day); reserved-name blocklist (google, openai, anthropic, cloudflare, microsoft, meta, apple, amazon)
+- [x] **DIR-01**: FastAPI backend exposes `POST /register` accepting Signature Agent Card (per draft-meunier-webbotauth-registry-01); fields are mostly optional with ≥1 required (`client_name`, `client_uri`, `contacts`, `expected-user-agent`, `keys`, etc.) [Phase 3 D-02 amended: Hono+Workers+D1 backend per CONTEXT D-33; same contract.]
+- [x] **DIR-02**: Registration uses proof-of-key-ownership flow: server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports; no email, no OAuth, no third-party identity provider
+- [x] **DIR-03**: Backend serves `GET /.well-known/http-message-signatures-directory/{id}` returning JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed
+- [x] **DIR-04**: Read endpoints CDN-cached with `Cache-Control: public, max-age=300` on `/.well-known/.../{kid}` [Pitfall 1 amendment: NOT immutable — multi-key rotation can mutate the JWKS doc]; per-IP rate limiting on registration (10/day); reserved-name blocklist (12 tokens × 3 suffixes per D-43)
 - [ ] **DIR-05**: Snapshot job mirrors full directory to `/static/all.json` and to a GitHub Pages mirror nightly (disaster recovery — works even if backend is down)
 - [x] **DIR-06**: Hosting confirmed working with Russian payment card on day 1 (Fly.io primary; Railway fallback; Cloudflare Workers + D1 zero-billing fallback if both rejected); domain auto-renewal enabled for >18 months
-- [ ] **DIR-07**: Hard spending caps configured on infrastructure ($20/month limit on directory hosting); abuse vectors (spam registrations, claimed-as-Google identity attempts) handled via blocklist + rate limit + manual review queue
+- [x] **DIR-07**: Zero-billing posture confirmed: Workers Free tier (100k req/day) + D1 Free tier (5GB / 5M reads/day); D-47 forbids any Workers Paid features. Abuse vectors handled via blocklist (D-43/D-44) + per-IP rate limit (10/day, D-40+D-48); manual review queue deferred to v2 (no UI in v1).
 - [ ] **DIR-08**: End-to-end flow validated: register identity → sign HTTP request via SDK → Cloudflare debug endpoint confirms verification passes using the registered directory URL
 
 > **Naming:** CLI command renamed from the original-draft name to `wbauth` in Phase 1 Plan 02
@@ -159,13 +159,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | POLICY-06 | Phase 2 | Pending |
 | POLICY-07 | Phase 2 | Pending |
 | POLICY-08 | Phase 2 | Pending |
-| DIR-01 | Phase 3 | Pending |
-| DIR-02 | Phase 3 | Pending |
-| DIR-03 | Phase 3 | Pending |
-| DIR-04 | Phase 3 | Pending |
+| DIR-01 | Phase 3 | Complete |
+| DIR-02 | Phase 3 | Complete |
+| DIR-03 | Phase 3 | Complete |
+| DIR-04 | Phase 3 | Complete |
 | DIR-05 | Phase 3 | Pending |
 | DIR-06 | Phase 1 | Complete |
-| DIR-07 | Phase 3 | Pending |
+| DIR-07 | Phase 3 | Complete |
 | DIR-08 | Phase 3 | Pending |
 | CLI-01 | Phase 2 | Complete |
 | CLI-02 | Phase 2 | Complete |

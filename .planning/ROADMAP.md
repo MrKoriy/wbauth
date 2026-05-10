@@ -65,7 +65,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A nightly snapshot job mirrors the full directory to `/static/all.json` and to a GitHub Pages mirror as disaster recovery (workflow file ships with cron commented out + `workflow_dispatch` for ad-hoc runs; cron enabled in Phase 5 when D-08 GitHub remote resolves); zero billing possible — Workers Free tier hard-capped at 100k req/day, D1 Free tier 5M reads/day
   5. `wbauth serve [--port N] --jwks <path>` runs a local self-hostable static JWKS server (~30 LOC stdlib `http.server`) for users who don't want to depend on the hosted directory; `wbauth keygen --jwks-output <path>` extension lets self-hosters export the JWKS file
 **Plans**: 3 plans
-- [ ] 03-01-PLAN.md — Hono+D1 Worker (challenge/submit/JWKS read/agents list/snapshot endpoint), blocklist, rate limit, response signing, vitest tests, secret provisioning, live deploy to wbauth.silov801.workers.dev (DIR-01, DIR-02, DIR-03, DIR-04, DIR-07)
+- [x] 03-01-PLAN.md — Hono+D1 Worker (challenge/submit/JWKS read/agents list/snapshot endpoint), blocklist, rate limit, response signing, vitest tests, secret provisioning, live deploy to wbauth.silov801.workers.dev (DIR-01, DIR-02, DIR-03, DIR-04, DIR-07)
 - [ ] 03-02-PLAN.md — GitHub Action snapshot workflow (cron disabled), Python `wbauth register` CLI, `wbauth serve` ≤30 LOC static JWKS server, `wbauth keygen --jwks-output` extension (DIR-05, CLI-04, CLI-05)
 - [ ] 03-03-PLAN.md — End-to-end manual test script (register → fetch JWKS → sign → Cloudflare research verifier 200 OK), E2E-RESULT.md write, exit-criterion checkpoint (DIR-08)
 **Parallelism note**: Plans 03-01 and 03-02 are sequential because 03-02's E2E `wbauth register` smoke and 03-03's exit script both require the live Worker URL and live D1. Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
@@ -107,6 +107,6 @@ Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in paralle
 |-------|----------------|--------|-----------|
 | 1. Foundation & Cryptographic Root | 4/4 | Complete | 2026-05-03 |
 | 2. Python Adapters & Policy Inspector | 1/3 | In Progress|  |
-| 3. Hosted Directory & Cloudflare Submission | 0/3 | Not started | - |
+| 3. Hosted Directory & Cloudflare Submission | 1/3 | In Progress |  |
 | 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |
 | 5. Pre-Army Hardening, Docs & Launch | 0/TBD | Not started | - |
