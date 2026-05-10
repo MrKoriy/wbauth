@@ -108,7 +108,9 @@ export async function sign(
   const headers = new Headers();
   for (const [k, v] of Object.entries(request.headers)) headers.set(k, v);
   const init: RequestInit = { method: request.method, headers };
-  if (hasBody) init.body = request.body!;
+  // Cast: Uint8Array is a valid BodyInit at runtime (web fetch spec) but DOM
+  // typing wants ArrayBufferView/string/Blob etc. The cast is safe.
+  if (hasBody) init.body = request.body as unknown as BodyInit;
   const req = new Request(request.url, init);
 
   // 6. Delegate to web-bot-auth. The signer is the active key's pre-resolved

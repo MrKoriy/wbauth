@@ -49,6 +49,13 @@ export function createSignedFetch(identity: Identity): typeof fetch {
       headers["User-Agent"] = identity.userAgent;
     }
 
-    return fetch(url, { ...init, method, headers, body: body ?? undefined });
+    // Cast body: Uint8Array is a valid BodyInit at runtime (web fetch spec)
+    // but DOM typing wants ArrayBufferView/string/Blob etc. The cast is safe.
+    return fetch(url, {
+      ...init,
+      method,
+      headers,
+      body: (body ?? undefined) as BodyInit | undefined,
+    });
   };
 }
