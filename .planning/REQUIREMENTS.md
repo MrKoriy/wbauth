@@ -69,9 +69,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DIST-01**: Documentation site built with Astro Starlight on GitHub Pages (zero billing, builds reproducibly years later); contains: 60-second quickstart, API reference, "why this exists" narrative, FAQ
 - [ ] **DIST-02**: README on GitHub: GIF demo at top, code-before-prose, time-to-understanding ≤30s; reviewed by native-English speaker before launch
 - [ ] **DIST-03**: 60-second Loom demo: agent fails on Cloudflare-protected site → installs SDK → 3 lines added → request passes; embedded on landing and README
-- [ ] **DIST-04**: Working integration recipe + tested example for **Browser Use** (`examples/browser_use_demo.py`)
-- [ ] **DIST-05**: Working integration recipe + tested example for **Stagehand** (`examples/stagehand_demo.ts`)
-- [ ] **DIST-06**: Working integration recipe + tested example for **Playwright + OpenAI Agents SDK** (`examples/openai_agents_demo.py`)
+- [x] **DIST-04**: Working integration recipe + tested example for **Browser Use** (`examples/browser_use_demo.py`)
+- [x] **DIST-05**: Working integration recipe + tested example for **Stagehand** (`examples/stagehand_demo.ts`)
+- [x] **DIST-06**: Working integration recipe + tested example for **Playwright + OpenAI Agents SDK** (`examples/openai_agents_demo.py`)
 - [ ] **DIST-07**: Pull requests submitted to `examples/` directories of Browser Use, Stagehand, and mcp-agent adding our SDK
 - [ ] **DIST-08**: Reference demo bot registered in agentpassport.dev directory AND submission filed to Cloudflare's verified-bot directory (filed on day 1 of Phase 4 due to opaque review timeline; approval by army leave is best-effort)
 
@@ -176,9 +176,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-01 | Phase 5 | Pending |
 | DIST-02 | Phase 5 | Pending |
 | DIST-03 | Phase 5 | Pending |
-| DIST-04 | Phase 4 | Pending |
-| DIST-05 | Phase 4 | Pending |
-| DIST-06 | Phase 4 | Pending |
+| DIST-04 | Phase 4 | Complete |
+| DIST-05 | Phase 4 | Complete |
+| DIST-06 | Phase 4 | Complete |
 | DIST-07 | Phase 4 | Pending |
 | DIST-08 | Phase 3 | Pending |
 | HARDEN-01 | Phase 5 | Pending |
