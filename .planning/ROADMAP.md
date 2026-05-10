@@ -15,8 +15,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation & Cryptographic Root** - Day-1 hosting test, monorepo scaffold, test vectors, Python signer passing Cloudflare debug verifier
 - [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, wbauth CLI core
 - [x] **Phase 3: Hosted Directory & Cloudflare Submission** - Cloudflare Workers + D1 directory at `wbauth.silov801.workers.dev`, end-to-end registration→sign→verify (DIST-08 moved to Phase 5 — Cloudflare submission requires public GitHub repo which depends on D-08 GitHub-org choice). E2E exit criterion D-52 SATISFIED (PARTIAL — internal chain proved; external Cloudflare verifier validation deferred to Phase 5 DIST-08).
-- [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos, upstream integration PRs
-- [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch + Cloudflare verified-bot submission (DIST-08)
+- [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos (DIST-07 upstream PRs moved to Phase 5 per 04-CONTEXT.md D-71)
+- [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch + Cloudflare verified-bot submission (DIST-08) + upstream framework PRs (DIST-07)
 
 ## Phase Details
 
@@ -71,32 +71,37 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Parallelism note**: Plans 03-01 and 03-02 are sequential because 03-02's E2E `wbauth register` smoke and 03-03's exit script both require the live Worker URL and live D1. Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
 
 ### Phase 4: TypeScript SDK & Framework Integrations
-**Goal**: Ship feature-parity TypeScript SDK guaranteed byte-equal to Python via shared test vectors, plus tested integration recipes for the three target frameworks (Browser Use, Stagehand, Playwright+OpenAI Agents SDK), and submit upstream PRs to those frameworks' `examples/` directories.
+**Goal**: Ship feature-parity TypeScript SDK guaranteed byte-equal to Python via shared test vectors, plus tested integration recipes for the three target frameworks (Browser Use, Stagehand, Playwright+OpenAI Agents SDK). Upstream PRs (DIST-07) are explicitly NOT in Phase 4 — see scope change below.
 **Depends on**: Phase 1 (test vectors locked) — runs largely in parallel with Phase 3
-**Requirements**: ADAPT-04, ADAPT-05, DIST-04, DIST-05, DIST-06, DIST-07
+**Requirements**: ADAPT-04, ADAPT-05, DIST-04, DIST-05, DIST-06
+**Scope change**: DIST-07 (upstream PRs to Browser Use, Stagehand, mcp-agent `examples/` directories) MOVED from Phase 4 to Phase 5 per 04-CONTEXT.md D-71. Three reasons: (1) PRs need a public GitHub repo URL — D-08 (GitHub org/account choice) still deferred until `git remote add` time. (2) PRs need an author identity for review correspondence — also gated on D-08. (3) PRs need capacity to respond to review feedback — Phase 5 hardening territory. Phase 4 produces the runnable `examples/*_demo.{py,ts}` scripts; Phase 5 forks the upstream repos and opens the PRs based on those scripts.
 **Success Criteria** (what must be TRUE):
   1. A TypeScript user can write `const signedFetch = createSignedFetch(identity); await signedFetch(url)` and the produced `Signature`/`Signature-Input`/`Signature-Agent` headers are byte-identical to Python's output for the same inputs (Vitest tests consume the same `spec/test-vectors/` JSON files as pytest)
   2. A TypeScript user can call `applyTo(page, identity)` against a Playwright page and outgoing requests are signed via `page.route("**/*", handler)` (NOT static `set_extra_http_headers`) — mirroring Python adapter behavior
-  3. `examples/browser_use_demo.py` shows a verified end-to-end flow: agent fails on a Cloudflare-protected site without the SDK, then passes after adding 3 lines of SDK code; same pattern works for `examples/stagehand_demo.ts` and `examples/openai_agents_demo.py`
-  4. Pull requests are submitted to the upstream `examples/` directories of Browser Use, Stagehand, and mcp-agent adding our SDK as a first-class integration option; PR links recorded in the project README
-  5. Public TypeScript API uses idiomatic camelCase (`Identity.loadOrGenerate()`, `signatureInput`) while JSON wire format stays snake_case to follow the IETF draft — both languages share the same on-disk JSON keyfile format so users can switch SDKs with the same key
-**Plans**: TBD (estimate 2 plans)
-**Parallelism note**: This is the project's primary time-leverage point. The test-vector contract from Phase 1 makes safe agent delegation possible — sub-agent(s) build the TS SDK while the human focuses on directory backend (Phase 3). Run a brief spike on Day 1 of this phase to verify `web-bot-auth` npm vs `http-message-sig` API surface fit before committing to the wrapper design.
+  3. `examples/browser_use_demo.py` shows a verified end-to-end flow runnable both with and without an LLM key: mock-mode opens our live Worker (`https://wbauth.silov801.workers.dev/agents`) and prints the signed Signature-Input header to stdout; real-mode runs a Browser Use Agent navigating to a benign target. Same dual-mode pattern applies to `examples/stagehand_demo.ts` and `examples/openai_agents_demo.py`.
+  4. A user can generate an Ed25519 key in Python (`wbauth keygen`), then load it in TypeScript via `Identity.loadOrGenerate`, and produce a Signature byte-equal to Python's output for the same vector — proving the canonical "single key file, two SDKs" guarantee (D-60 / D-66 cross-language round-trip test)
+  5. Public TypeScript API uses idiomatic camelCase (`Identity.loadOrGenerate()`, `signatureInput`) and exports flat from `wbauth` root (`import { sign, Identity, createSignedFetch, applyTo } from "wbauth"`); JSON wire format stays snake_case to follow the IETF draft; on-disk PKCS8 NoEncryption PEM file format works in both SDKs
+**Plans**: 3 plans
+- [ ] 04-01-PLAN.md — TS SDK core: Identity (loadOrGenerate/fromTestKey/rotate/exportJwks), signer (wraps web-bot-auth 0.1.3), createSignedFetch (≤50 LOC), applyTo Playwright (≤50 LOC), vitest unit + adapter conformance vs vector 01 (ADAPT-04, ADAPT-05)
+- [ ] 04-02-PLAN.md — Cross-language Identity round-trip (D-66): Python keygen → TS load → sign vector 01 → byte-equal vs Python; multi-key rotation TS coverage closing Phase 1 vector 04 skip (supporting plan, no new requirements)
+- [ ] 04-03-PLAN.md — Three runnable framework demos in `examples/`: browser_use_demo.py + stagehand_demo.ts + openai_agents_demo.py, all with optional-LLM bifurcation, mock-mode targets the live Worker (DIST-04, DIST-05, DIST-06)
+**Parallelism note**: This is the project's primary time-leverage point. The test-vector contract from Phase 1 makes safe agent delegation possible — sub-agent(s) build the TS SDK while the human focuses on directory backend (Phase 3). Plans 04-02 and 04-03 are wave 2 (depend on 04-01) and run in parallel with each other (different files: cross-language test in `python/tests/` + `typescript/tests/`; demos in `examples/`). DIST-07 (upstream PRs) is explicitly Phase 5 work per D-71.
 
 ### Phase 5: Pre-Army Hardening, Docs & Launch
-**Goal**: Make the project actually survive 6+ months unmaintained — documentation that answers "is this abandoned?" with content not activity, automated systems that catch dependency rot and Cloudflare-spec drift, frozen-branch guarantees, and the public launch (Loom demo, README polish, distribution). Also resolves D-08 (GitHub org choice) and files the Cloudflare verified-bot submission (DIST-08, moved from Phase 3 per 03-CONTEXT.md D-53).
+**Goal**: Make the project actually survive 6+ months unmaintained — documentation that answers "is this abandoned?" with content not activity, automated systems that catch dependency rot and Cloudflare-spec drift, frozen-branch guarantees, and the public launch (Loom demo, README polish, distribution). Also resolves D-08 (GitHub org choice), files the Cloudflare verified-bot submission (DIST-08, moved from Phase 3 per 03-CONTEXT.md D-53), and submits upstream framework PRs (DIST-07, moved from Phase 4 per 04-CONTEXT.md D-71).
 **Depends on**: Phase 4 (all SDK + adapter + directory + demos shipping)
-**Requirements**: DIST-01, DIST-02, DIST-03, DIST-08, HARDEN-01, HARDEN-02, HARDEN-03, HARDEN-04, HARDEN-05, HARDEN-06, HARDEN-07
+**Requirements**: DIST-01, DIST-02, DIST-03, DIST-07, DIST-08, HARDEN-01, HARDEN-02, HARDEN-03, HARDEN-04, HARDEN-05, HARDEN-06, HARDEN-07
 **Success Criteria** (what must be TRUE):
   1. A developer landing on the GitHub README understands the project in ≤30 seconds — GIF demo at top, code-before-prose, native-English review completed; the 60-second Loom demo (agent fails on Cloudflare → installs SDK → 3 lines added → request passes) is embedded on landing and README
   2. Astro Starlight docs on GitHub Pages contain quickstart, API reference, "why this exists", and FAQ — builds reproducibly years later with `package-lock.json` committed; PyPI publishing uses OIDC trusted publishers (no token to rotate); npm publishing uses provenance from GitHub Actions
   3. A monthly scheduled CI canary verifies "still installs cleanly"; a daily conformance canary (GitHub Action → Cloudflare debug) opens a GitHub issue and posts a Discord alert on failure — both run without manual intervention; Dependabot is configured (not Renovate — fewer PRs during absence)
   4. A `v1.x-frozen` git branch exists with a 12-month compatibility promise documented in `MAINTAINER_AWAY.md` at the repo root (expected return date, contact for moderators); a pinned status issue at the top of the repo explains the maintainer absence and routes urgent security reports; CONTRIBUTING.md documents the triage path
   5. 2FA backup codes for GitHub, PyPI, npm, and the domain registrar are printed and stored offline with a trusted party; designated repo moderator(s) added with triage permissions; domain auto-renewal verified to cover >18 months; DNS, TLS cert (Let's Encrypt auto-renew), CDN config all set to auto-mode with no manual touch points
-  6. **DIST-08**: Reference demo bot registered in `wbauth.silov801.workers.dev` directory (using Phase 3's `wbauth register` CLI) AND submission filed to Cloudflare's verified-bot directory (filed on Day 1 of Phase 5 due to opaque review timeline; approval by army leave is best-effort). Phase 3 snapshot workflow's `cron` is enabled in this phase once GitHub remote exists.
-**Plans**: TBD (estimate 2 plans)
+  6. **DIST-07**: Pull requests submitted to `examples/` directories of Browser Use, Stagehand, and mcp-agent adding our SDK as a first-class integration option (based on the Phase 4 `examples/*_demo.{py,ts}` scripts); PR links recorded in the project README
+  7. **DIST-08**: Reference demo bot registered in `wbauth.silov801.workers.dev` directory (using Phase 3's `wbauth register` CLI) AND submission filed to Cloudflare's verified-bot directory (filed on Day 1 of Phase 5 due to opaque review timeline; approval by army leave is best-effort). Phase 3 snapshot workflow's `cron` is enabled in this phase once GitHub remote exists.
+**Plans**: TBD (estimate 2-3 plans)
 **UI hint**: yes
-**Parallelism note**: Docs writing (DIST-01/02/03) and hardening tasks (HARDEN-01-07) are independent — sub-agents can draft the Astro Starlight site, README polish, and Loom storyboard in parallel with the human configuring OIDC publishers, Dependabot, frozen branch, and 2FA backup printing.
+**Parallelism note**: Docs writing (DIST-01/02/03) and hardening tasks (HARDEN-01-07) are independent — sub-agents can draft the Astro Starlight site, README polish, and Loom storyboard in parallel with the human configuring OIDC publishers, Dependabot, frozen branch, and 2FA backup printing. DIST-07 (upstream PRs) and DIST-08 (Cloudflare submission) both unblock once D-08 (GitHub org choice) resolves at `git remote add` time.
 
 ## Progress
 
@@ -108,5 +113,5 @@ Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in paralle
 | 1. Foundation & Cryptographic Root | 4/4 | Complete | 2026-05-03 |
 | 2. Python Adapters & Policy Inspector | 1/3 | In Progress|  |
 | 3. Hosted Directory & Cloudflare Submission | 3/3 | Complete | 2026-05-10 |
-| 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |
+| 4. TypeScript SDK & Framework Integrations | 0/3 | Planned | - |
 | 5. Pre-Army Hardening, Docs & Launch | 0/TBD | Not started | - |
