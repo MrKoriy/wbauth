@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-05-10T19:11:13.144Z"
-last_activity: 2026-05-10 -- Phase 03 Plan 03 complete (E2E live against production Worker; kid kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I permanent in D1)
+last_updated: "2026-05-10T20:00:44.757Z"
+last_activity: 2026-05-10
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
+  total_plans: 13
+  completed_plans: 11
+  percent: 85
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** AI-агенты получают идентичность и знают свои права на сайте — до того, как сделают первый запрос. Если ничего другое не работает, эти две вещи (signed identity + pre-flight policy) должны работать в одну строку импорта.
-**Current focus:** Phase 03 — hosted-directory-cloudflare-submission
+**Current focus:** Phase 04 — typescript-sdk-framework-integrations
 
 ## Current Position
 
-Phase: 03 (hosted-directory-cloudflare-submission) — COMPLETE
+Phase: 04 (typescript-sdk-framework-integrations) — EXECUTING
 Next phase: 04 (TypeScript SDK & Framework Integrations) — has been runnable in parallel since Phase 1's test vectors locked
-Plan: 3 of 3 complete; Phase 3 done
-Status: Phase 03 COMPLETE — D-52 E2E exit criterion SATISFIED (STATUS: PARTIAL accepted per 03-RESEARCH.md §8 NOTE; full external Cloudflare verifier validation deferred to Phase 5 DIST-08)
-Last activity: 2026-05-10 -- Phase 03 Plan 03 complete (E2E live against production Worker; kid kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I permanent in D1)
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-05-10
 
 Progress: [██████████] 100% (3/3 plans complete in Phase 3)
 
@@ -67,6 +67,7 @@ Progress: [██████████] 100% (3/3 plans complete in Phase 3)
 | Phase 03-hosted-directory-cloudflare-submission P01 | ~120min | 3 tasks (incl. human-action deploy gate) + 0 deviations | 18 created, 3 modified, 1 deleted |
 | Phase 03-hosted-directory-cloudflare-submission P02 | ~50min | 3 tasks + 3 auto-fixed deviations | 9 created, 1 modified |
 | Phase 03-hosted-directory-cloudflare-submission P03 | ~25min | 2 tasks (autonomous + live-run gate) + 1 auto-fixed deviation | 1 created (E2E-RESULT.md), 1 modified (cli.py); script committed in prior session |
+| Phase 04-typescript-sdk-framework-integrations P01 | 8min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,10 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase 3 Plan 02]: Pre-existing macOS subprocess flake in tests/test_cli_keygen.py logged in deferred-items.md DEF-03-01; affects 3 of 195 tests on macOS only (CI on Ubuntu unaffected; in-process tests all green).
 - [Phase 3 Plan 03]: D-52 exit criterion SATISFIED with STATUS: PARTIAL (accepted per 03-RESEARCH.md §8 NOTE). Internal register→fetch→sign chain proved end-to-end against live `wbauth.silov801.workers.dev`; Cloudflare research verifier rejected the registered kid because it currently validates ONLY the RFC 9421 test key. Full external verification deferred to Phase 5 DIST-08 (Cloudflare verified-bots submission). Permanent registered kid in production D1: `kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I`.
 - [Phase 3 Plan 03]: `_do_register` body builder now filters None-valued optional fields (Rule 1 deviation discovered live). Worker zod schema treats client_uri/expected_user_agent/purpose as `.optional()` not `.nullable()` — explicit JSON null triggered 400 invalid_type. Fix: dict comprehension drops keys whose value is None before json.dumps. Commit a0e8aab.
+- [Phase ?]: TS Identity uses Node stdlib createPrivateKey for PEM-JWK conversion (no jose dep)
+- [Phase 04]: TS adapter conformance via vi.mock (hoisted) — vi.spyOn cannot intercept top-level imports (Pitfall 2)
+- [Phase 04]: DOM lib added to typescript/tsconfig.json for JsonWebKey + BodyInit DTS emission
+- [Phase 04]: playwright is peerDep optional (not runtime dep) — types-only import keeps fetch-only consumers cost-free
 
 ### Pending Todos
 
@@ -132,8 +137,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T19:11:13.134Z
+Last session: 2026-05-10T20:00:44.753Z
 Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-typescript-sdk-framework-integrations/04-CONTEXT.md
+Resume file: None
 Next plan: Phase 4 first plan (TypeScript SDK adapters with byte-equality vs Phase-1 test vectors). Phase 4 was already cleared to start in parallel since Phase 1 vectors locked; no dependency from Phase 3 directory backend.
 Phase 5 carry-over: DIST-08 will re-run python/scripts/e2e_phase3.py post-Cloudflare-verified-bot submission to flip STATUS PARTIAL → PASS.
