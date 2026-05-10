@@ -5,9 +5,11 @@ What this demonstrates:
   page that Browser Use (v0.7+) is driving. Every outgoing request from that
   page carries Signature, Signature-Input, and Signature-Agent headers
   (Web Bot Auth profile, RFC 9421).
-- Real-mode (with OPENAI_API_KEY or BROWSER_USE_API_KEY): runs a live Browser
-  Use Agent against a benign target (https://example.com). The agent's HTTP
-  requests are signed.
+- Real-mode: runs a live Browser Use Agent against a benign target
+  (https://example.com). The agent's HTTP requests are signed. Routes
+  through **OpenRouter** by default (one key → many models).
+  Falls back to direct OpenAI or Browser Use's hosted backend if those
+  keys are set instead.
 - Mock-mode (no LLM key): skips the Agent entirely and just opens a
   BrowserSession, attaches signing, navigates to our directory Worker
   (https://wbauth.silov801.workers.dev/agents), and prints the signed
@@ -22,9 +24,16 @@ Run:
     # Mock mode (no key required):
     python examples/browser_use_demo.py
 
-    # Real mode (LLM key drives the Agent):
+    # Real mode via OpenRouter (recommended — one key, all models):
+    OPENROUTER_API_KEY=sk-or-... python examples/browser_use_demo.py
+    # Optional: pick a model
+    OPENROUTER_API_KEY=sk-or-... WBAUTH_MODEL=anthropic/claude-3.5-sonnet \\
+      python examples/browser_use_demo.py
+
+    # Real mode via direct OpenAI:
     OPENAI_API_KEY=sk-... python examples/browser_use_demo.py
-    # or
+
+    # Real mode via Browser Use hosted backend:
     BROWSER_USE_API_KEY=... python examples/browser_use_demo.py
 
 Pitfalls:
@@ -109,11 +118,42 @@ async def mock_mode() -> None:
         await session.kill()
 
 
+def _build_llm():
+    """Pick the cheapest viable LLM client based on env keys.
+
+    Priority: OPENROUTER_API_KEY (recommended — one key, many models)
+    → OPENAI_API_KEY (direct) → BROWSER_USE_API_KEY (hosted).
+    """
+    if openrouter_key := os.getenv("OPENROUTER_API_KEY"):
+        # Browser Use's ChatOpenAI accepts custom base_url — point at
+        # OpenRouter and use a provider-prefixed model name.
+        from browser_use.llm import ChatOpenAI
+
+        model = os.getenv("WBAUTH_MODEL", "openai/gpt-4o-mini")
+        print(f"[demo] LLM provider: OpenRouter (model={model})")
+        return ChatOpenAI(
+            model=model,
+            api_key=openrouter_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+    if os.getenv("OPENAI_API_KEY"):
+        from browser_use.llm import ChatOpenAI
+
+        model = os.getenv("WBAUTH_MODEL", "gpt-4o-mini")
+        print(f"[demo] LLM provider: OpenAI (model={model})")
+        return ChatOpenAI(model=model)
+    # Browser Use hosted backend — uses BROWSER_USE_API_KEY automatically.
+    from browser_use import ChatBrowserUse
+
+    print("[demo] LLM provider: Browser Use hosted")
+    return ChatBrowserUse()
+
+
 async def real_mode() -> None:
-    """Run a live Browser Use Agent. Requires an LLM key (OPENAI_API_KEY
-    or BROWSER_USE_API_KEY). The Agent navigates to a benign target;
-    every browser request is signed via attach_signing()."""
-    from browser_use import Agent, Browser, ChatBrowserUse
+    """Run a live Browser Use Agent. Requires an LLM key (OPENROUTER_API_KEY,
+    OPENAI_API_KEY, or BROWSER_USE_API_KEY). The Agent navigates to a benign
+    target; every browser request is signed via attach_signing()."""
+    from browser_use import Agent, Browser
 
     browser = Browser()
     await browser.start()
@@ -131,7 +171,7 @@ async def real_mode() -> None:
 
         agent = Agent(
             task="Open https://example.com and report the page title.",
-            llm=ChatBrowserUse(),  # uses OPENAI_API_KEY or BROWSER_USE_API_KEY
+            llm=_build_llm(),
             browser=browser,
         )
         result = await agent.run()
@@ -141,11 +181,17 @@ async def real_mode() -> None:
 
 
 def main() -> None:
-    if os.getenv("OPENAI_API_KEY") or os.getenv("BROWSER_USE_API_KEY"):
+    if (
+        os.getenv("OPENROUTER_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+        or os.getenv("BROWSER_USE_API_KEY")
+    ):
         print("[demo] Real mode (LLM key detected)")
         asyncio.run(real_mode())
     else:
-        print("[demo] Mock mode (no LLM key — set OPENAI_API_KEY for real Agent)")
+        print(
+            "[demo] Mock mode (no LLM key — set OPENROUTER_API_KEY for real Agent)"
+        )
         asyncio.run(mock_mode())
 
 
