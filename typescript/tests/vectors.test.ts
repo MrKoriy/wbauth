@@ -6,10 +6,13 @@
  * `web-bot-auth` 0.1.3 npm package produces byte-identical Signature-Input
  * and Signature header values.
  *
- * Multi-key vectors (vectors with `retiring_key_jwk`) are skipped here:
- * Phase 1's TypeScript SDK is a stub; the full multi-key Identity API is
- * Phase 4's territory. The Python side (`test_vector_jwks_full_for_multi_key`)
- * already covers the JWKS export oracle.
+ * Multi-key vectors (vectors with `retiring_key_jwk`) are skipped here at the
+ * raw web-bot-auth signer level — that lib only exposes a single-Signer API.
+ * The full multi-key Identity rotation oracle moved to
+ * `tests/identity-multikey.test.ts` (Plan 04-02), which exercises
+ * Identity.rotate() + exportJwks() ordering against vector 04. The Python
+ * side (`test_vector_jwks_full_for_multi_key`) covers the JWKS export oracle
+ * end-to-end from the Python SDK.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -26,7 +29,11 @@ const vectors = loadAllVectors();
 describe("cross-language byte-equality vectors (IDENT-04)", () => {
   for (const v of vectors) {
     if (v.input.identity.retiring_key_jwk) {
-      it.skip(`${v.name} (multi-key — Phase 4 will cover)`, () => {});
+      // Multi-key Identity oracle lives in tests/identity-multikey.test.ts
+      // (Plan 04-02). The raw web-bot-auth Signer API is single-key, so the
+      // signer-level vector loop here cannot reproduce a 2-key JWKS;
+      // the SDK-level Identity API can.
+      it.skip(`${v.name} (multi-key — see identity-multikey.test.ts)`, () => {});
       continue;
     }
 
