@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --all-packages
       - name: Sign + send to Cloudflare research verifier
         run: uv run python -m wbauth._smoke.cloudflare_debug
         # Exits non-zero on:

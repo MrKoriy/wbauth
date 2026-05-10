@@ -22,7 +22,6 @@ import json
 
 from unittest.mock import patch
 
-import pytest
 
 from wbauth.cli import main
 from wbauth.policy import SitePolicy

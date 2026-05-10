@@ -23,10 +23,12 @@ class WebBotAuth(httpx.Auth):
         self._identity = identity
 
     def sync_auth_flow(self, request):
-        self._sign(request); yield request
+        self._sign(request)
+        yield request
 
     async def async_auth_flow(self, request):
-        self._sign(request); yield request  # signing is pure CPU
+        self._sign(request)
+        yield request  # signing is pure CPU
 
     def _sign(self, request):
         body = request.content if request.content else None

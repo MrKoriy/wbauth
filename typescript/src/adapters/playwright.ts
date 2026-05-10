@@ -22,25 +22,25 @@ import { sign } from "../signer.js";
 import { ensureContentDigest } from "./_utils.js";
 
 export async function applyTo(page: Page, identity: Identity): Promise<void> {
-  await page.route("**/*", async (route: Route, request: PWRequest) => {
-    const headers = await request.allHeaders();
-    const postData = request.postDataBuffer();
-    const body = postData ? new Uint8Array(postData) : null;
+	await page.route("**/*", async (route: Route, request: PWRequest) => {
+		const headers = await request.allHeaders();
+		const postData = request.postDataBuffer();
+		const body = postData ? new Uint8Array(postData) : null;
 
-    ensureContentDigest(request.method(), headers, body);
+		ensureContentDigest(request.method(), headers, body);
 
-    await sign(
-      { method: request.method(), url: request.url(), headers, body },
-      identity,
-    );
+		await sign(
+			{ method: request.method(), url: request.url(), headers, body },
+			identity,
+		);
 
-    if (
-      identity.userAgent &&
-      !Object.keys(headers).some((k) => k.toLowerCase() === "user-agent")
-    ) {
-      headers["User-Agent"] = identity.userAgent;
-    }
+		if (
+			identity.userAgent &&
+			!Object.keys(headers).some((k) => k.toLowerCase() === "user-agent")
+		) {
+			headers["User-Agent"] = identity.userAgent;
+		}
 
-    await route.continue({ headers });
-  });
+		await route.continue({ headers });
+	});
 }

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 from wbauth.cli import _build_parser, _dispatch_keygen
 from wbauth.identity import Identity

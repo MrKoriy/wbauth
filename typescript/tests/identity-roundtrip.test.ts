@@ -24,9 +24,10 @@
  * cryptography is unavailable, so the suite stays green on contributor
  * machines without the python venv.
  */
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
 import { execSync } from "node:child_process";
-import { unlinkSync, existsSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Identity } from "../src/identity.js";
 import { sign } from "../src/signer.js";
 import { loadAllVectors } from "./helpers.js";
@@ -41,32 +42,32 @@ if (!v01) throw new Error("vector 01-basic-get not found");
  * contributor machines that have not run `uv sync` in the python workspace.
  */
 function pythonAvailable(): boolean {
-  try {
-    execSync(
-      'cd ../python && uv run python3 -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey"',
-      { stdio: "pipe" },
-    );
-    return true;
-  } catch {
-    return false;
-  }
+	try {
+		execSync(
+			'cd ../python && uv run python3 -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey"',
+			{ stdio: "pipe" },
+		);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 const pythonOK = pythonAvailable();
 const describeIfPython = pythonOK ? describe : describe.skip;
 
 beforeAll(() => {
-  if (!pythonOK) return;
-  if (existsSync(KEY_PATH)) unlinkSync(KEY_PATH);
-  // Materialize the RFC 9421 Appendix B.1.4 test key as a PKCS8 NoEncryption
-  // PEM via Python — this is precisely the on-disk format that
-  // `python/src/wbauth/identity.py::_generate_keypair_to` writes (lines
-  // 282-293). Using `cd ../python && uv run python3` so `cryptography` from
-  // the python workspace venv is on path. The script body is a hard-coded
-  // literal — no test/user input is interpolated, so there is no
-  // command-injection surface (T-04-02-02).
-  execSync(
-    `cd ../python && uv run python3 -c "
+	if (!pythonOK) return;
+	if (existsSync(KEY_PATH)) unlinkSync(KEY_PATH);
+	// Materialize the RFC 9421 Appendix B.1.4 test key as a PKCS8 NoEncryption
+	// PEM via Python — this is precisely the on-disk format that
+	// `python/src/wbauth/identity.py::_generate_keypair_to` writes (lines
+	// 282-293). Using `cd ../python && uv run python3` so `cryptography` from
+	// the python workspace venv is on path. The script body is a hard-coded
+	// literal — no test/user input is interpolated, so there is no
+	// command-injection surface (T-04-02-02).
+	execSync(
+		`cd ../python && uv run python3 -c "
 import base64, os
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -76,43 +77,43 @@ pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.
 fd = os.open('${KEY_PATH}', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 os.write(fd, pem); os.close(fd)
 "`,
-    { stdio: "pipe" },
-  );
+		{ stdio: "pipe" },
+	);
 });
 
 afterAll(() => {
-  if (existsSync(KEY_PATH)) unlinkSync(KEY_PATH);
+	if (existsSync(KEY_PATH)) unlinkSync(KEY_PATH);
 });
 
 describeIfPython("cross-language Identity round-trip (D-66)", () => {
-  it("loads Python-written PKCS8 PEM and produces canonical RFC 7638 kid", async () => {
-    const identity = await Identity.loadOrGenerate(KEY_PATH, {
-      signatureAgentUrl: v01.input.identity.signature_agent_url,
-    });
-    expect(identity.kid).toBe("poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U");
-  });
+	it("loads Python-written PKCS8 PEM and produces canonical RFC 7638 kid", async () => {
+		const identity = await Identity.loadOrGenerate(KEY_PATH, {
+			signatureAgentUrl: v01.input.identity.signature_agent_url,
+		});
+		expect(identity.kid).toBe("poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U");
+	});
 
-  it("signs vector 01 byte-equal vs Python's expected.json output", async () => {
-    const identity = await Identity.loadOrGenerate(KEY_PATH, {
-      signatureAgentUrl: v01.input.identity.signature_agent_url,
-    });
-    const out = await sign(
-      {
-        method: v01.input.request.method,
-        url: v01.input.request.url,
-        headers: { ...v01.input.request.headers },
-        body: null,
-      },
-      identity,
-      {
-        created: new Date(v01.input.signing_params.created * 1000),
-        expiresAfterSeconds: v01.input.signing_params.expires_after_seconds,
-        nonce: v01.input.signing_params.nonce,
-        label: v01.input.signing_params.label,
-      },
-    );
-    expect(out.signatureInput).toBe(v01.expected.signature_input_value);
-    expect(out.signature).toBe(v01.expected.signature_value);
-    expect(out.signatureAgent).toBe(v01.expected.signature_agent_value);
-  });
+	it("signs vector 01 byte-equal vs Python's expected.json output", async () => {
+		const identity = await Identity.loadOrGenerate(KEY_PATH, {
+			signatureAgentUrl: v01.input.identity.signature_agent_url,
+		});
+		const out = await sign(
+			{
+				method: v01.input.request.method,
+				url: v01.input.request.url,
+				headers: { ...v01.input.request.headers },
+				body: null,
+			},
+			identity,
+			{
+				created: new Date(v01.input.signing_params.created * 1000),
+				expiresAfterSeconds: v01.input.signing_params.expires_after_seconds,
+				nonce: v01.input.signing_params.nonce,
+				label: v01.input.signing_params.label,
+			},
+		);
+		expect(out.signatureInput).toBe(v01.expected.signature_input_value);
+		expect(out.signature).toBe(v01.expected.signature_value);
+		expect(out.signatureAgent).toBe(v01.expected.signature_agent_value);
+	});
 });

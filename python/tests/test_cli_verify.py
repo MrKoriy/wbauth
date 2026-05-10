@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 from wbauth.cli import main
 from wbauth._smoke.cloudflare_debug import (
