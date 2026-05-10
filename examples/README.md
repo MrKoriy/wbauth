@@ -44,3 +44,37 @@ BROWSER_USE_API_KEY=... python examples/browser_use_demo.py
 lower-level `BrowserSession` in mock-mode (no Agent needed) and the
 high-level `Browser` + `Agent` in real-mode. Both expose
 `get_current_page()` to reach the underlying Playwright Page.
+
+---
+
+## stagehand_demo.ts — Stagehand × wbauth (DIST-05)
+
+Demonstrates `applyTo(page, identity)` working on Stagehand's
+underlying Playwright page (raw `stagehand.context.pages()[0]`).
+
+**Install:**
+```bash
+npm install @browserbasehq/stagehand wbauth
+npx playwright install chromium  # Stagehand LOCAL still needs the Chromium binary
+```
+
+**Run:**
+```bash
+# Mock mode (no LLM key — opens our Worker, prints signed request):
+npx tsx examples/stagehand_demo.ts
+
+# Real mode (LLM key — runs stagehand.observe on example.com):
+OPENAI_API_KEY=sk-... npx tsx examples/stagehand_demo.ts
+```
+
+**Pitfall:** Stagehand `env: "LOCAL"` does NOT mean "no browser
+needed" — it means "local Chromium instead of Browserbase." You still
+need `playwright install chromium` once.
+
+**Pitfall:** call `applyTo(page, identity)` BEFORE the first
+`page.goto` — `page.route` only intercepts requests started after
+registration.
+
+**Local-dev tip:** if you're hacking on the wbauth TS SDK in this
+monorepo, `cd typescript && npm link` then `cd examples && npm link
+wbauth` so the demo picks up your local build.
