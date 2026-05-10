@@ -78,3 +78,58 @@ registration.
 **Local-dev tip:** if you're hacking on the wbauth TS SDK in this
 monorepo, `cd typescript && npm link` then `cd examples && npm link
 wbauth` so the demo picks up your local build.
+
+---
+
+## openai_agents_demo.py — OpenAI Agents SDK × wbauth (DIST-06)
+
+Demonstrates `WebBotAuth(identity)` + `httpx.Client` injected into an
+OpenAI Agents SDK `@function_tool` so the Agent's tool calls produce
+signed HTTP requests.
+
+**Install:**
+```bash
+uv pip install "openai-agents" "httpx>=0.28,<1"
+```
+
+**Run:**
+```bash
+# Mock mode (no LLM key — calls signed_get directly, prints result + signature presence):
+python examples/openai_agents_demo.py
+
+# Real mode (LLM key — runs Runner with a real Agent that calls the tool):
+OPENAI_API_KEY=sk-... python examples/openai_agents_demo.py
+```
+
+**Note:** The Agent's *own* OpenAI API calls are NOT signed by wbauth
+(we don't sign requests TO openai.com). Only the **tool's** outbound
+HTTP requests via `httpx.Client(auth=WebBotAuth(identity))` are
+signed. This is the right model — the Agent gets identity for the
+sites it visits, not for its own LLM calls.
+
+**Note:** Mock-mode does NOT import `agents` (the openai-agents pip
+package), so you can run the mock-mode smoke without installing it.
+
+---
+
+## Why these demos exist (background)
+
+Each demo follows the same pattern (per CONTEXT D-67):
+
+1. **Detect LLM key** in env (`OPENAI_API_KEY` etc.)
+2. **Real mode**: full Agent loop on a benign target
+   (`https://example.com`)
+3. **Mock mode**: skip the Agent, run the SDK's signing path directly
+   against our Worker
+   (`https://wbauth.silov801.workers.dev/agents`), and print the
+   signed request
+
+This bifurcation means the demos are runnable on a fresh box — no API
+key required for a meaningful smoke run. Phase 5 will base the README
+"agent fails on Cloudflare → installs SDK → 3 lines added → request
+passes" Loom demo on these scripts.
+
+**Per CONTEXT D-71:** Upstream PRs to Browser Use, Stagehand, and
+mcp-agent's `examples/` directories (DIST-07) are NOT in Phase 4.
+They are scheduled for Phase 5 (need a public GitHub repo URL +
+author identity for review correspondence).
