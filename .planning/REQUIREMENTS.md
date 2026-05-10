@@ -48,7 +48,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DIR-05**: Snapshot job mirrors full directory to `/static/all.json` and to a GitHub Pages mirror nightly (disaster recovery — works even if backend is down) [Phase 3 Plan 02: workflow_dispatch only; cron commented out per Pitfall 7 until Phase 5 D-08 resolves]
 - [x] **DIR-06**: Hosting confirmed working with Russian payment card on day 1 (Fly.io primary; Railway fallback; Cloudflare Workers + D1 zero-billing fallback if both rejected); domain auto-renewal enabled for >18 months
 - [x] **DIR-07**: Zero-billing posture confirmed: Workers Free tier (100k req/day) + D1 Free tier (5GB / 5M reads/day); D-47 forbids any Workers Paid features. Abuse vectors handled via blocklist (D-43/D-44) + per-IP rate limit (10/day, D-40+D-48); manual review queue deferred to v2 (no UI in v1).
-- [ ] **DIR-08**: End-to-end flow validated: register identity → sign HTTP request via SDK → Cloudflare debug endpoint confirms verification passes using the registered directory URL
+- [x] **DIR-08**: End-to-end flow validated: register identity → sign HTTP request via SDK → Cloudflare debug endpoint confirms verification passes using the registered directory URL [Phase 3 Plan 03: STATUS PARTIAL — internal register→fetch→sign chain proved against live Worker (kid `kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I` permanent in D1); Cloudflare research verifier rejected the registered kid because it currently validates ONLY the RFC 9421 test key per 03-RESEARCH.md §8 NOTE; full external verification deferred to DIST-08 in Phase 5]
 
 > **Naming:** CLI command renamed from the original-draft name to `wbauth` in Phase 1 Plan 02
 > per CONTEXT.md D-06 (public surface = `wbauth`) and consistency with the package name.
@@ -166,7 +166,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIR-05 | Phase 3 | Complete |
 | DIR-06 | Phase 1 | Complete |
 | DIR-07 | Phase 3 | Complete |
-| DIR-08 | Phase 3 | Pending |
+| DIR-08 | Phase 3 | Complete (PARTIAL — see Plan 03-03 SUMMARY) |
 | CLI-01 | Phase 2 | Complete |
 | CLI-02 | Phase 2 | Complete |
 | CLI-03 | Phase 2 | Complete |

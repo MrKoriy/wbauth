@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & Cryptographic Root** - Day-1 hosting test, monorepo scaffold, test vectors, Python signer passing Cloudflare debug verifier
 - [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, wbauth CLI core
-- [ ] **Phase 3: Hosted Directory & Cloudflare Submission** - Cloudflare Workers + D1 directory at `wbauth.silov801.workers.dev`, end-to-end registration→sign→verify (DIST-08 moved to Phase 5 — Cloudflare submission requires public GitHub repo which depends on D-08 GitHub-org choice)
+- [x] **Phase 3: Hosted Directory & Cloudflare Submission** - Cloudflare Workers + D1 directory at `wbauth.silov801.workers.dev`, end-to-end registration→sign→verify (DIST-08 moved to Phase 5 — Cloudflare submission requires public GitHub repo which depends on D-08 GitHub-org choice). E2E exit criterion D-52 SATISFIED (PARTIAL — internal chain proved; external Cloudflare verifier validation deferred to Phase 5 DIST-08).
 - [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos, upstream integration PRs
 - [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch + Cloudflare verified-bot submission (DIST-08)
 
@@ -67,7 +67,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 - [x] 03-01-PLAN.md — Hono+D1 Worker (challenge/submit/JWKS read/agents list/snapshot endpoint), blocklist, rate limit, response signing, vitest tests, secret provisioning, live deploy to wbauth.silov801.workers.dev (DIR-01, DIR-02, DIR-03, DIR-04, DIR-07)
 - [x] 03-02-PLAN.md — GitHub Action snapshot workflow (cron disabled), Python `wbauth register` CLI, `wbauth serve` ≤30 LOC static JWKS server, `wbauth keygen --jwks-output` extension (DIR-05, CLI-04, CLI-05)
-- [ ] 03-03-PLAN.md — End-to-end manual test script (register → fetch JWKS → sign → Cloudflare research verifier 200 OK), E2E-RESULT.md write, exit-criterion checkpoint (DIR-08)
+- [x] 03-03-PLAN.md — End-to-end manual test script (register → fetch JWKS → sign → Cloudflare research verifier 200 OK), E2E-RESULT.md write, exit-criterion checkpoint (DIR-08); STATUS: PARTIAL accepted per 03-RESEARCH.md §8 NOTE
 **Parallelism note**: Plans 03-01 and 03-02 are sequential because 03-02's E2E `wbauth register` smoke and 03-03's exit script both require the live Worker URL and live D1. Phase 4 (TypeScript SDK) can begin in parallel with this phase as soon as Phase 1's test vectors are locked — TS implementation by sub-agents is safe because conformance is gated by the shared `spec/test-vectors/` JSON files.
 
 ### Phase 4: TypeScript SDK & Framework Integrations
@@ -107,6 +107,6 @@ Phases execute in numeric order: 1 → 2 → 3 (with Phase 4 starting in paralle
 |-------|----------------|--------|-----------|
 | 1. Foundation & Cryptographic Root | 4/4 | Complete | 2026-05-03 |
 | 2. Python Adapters & Policy Inspector | 1/3 | In Progress|  |
-| 3. Hosted Directory & Cloudflare Submission | 2/3 | In Progress |  |
+| 3. Hosted Directory & Cloudflare Submission | 3/3 | Complete | 2026-05-10 |
 | 4. TypeScript SDK & Framework Integrations | 0/TBD | Not started | - |
 | 5. Pre-Army Hardening, Docs & Launch | 0/TBD | Not started | - |
