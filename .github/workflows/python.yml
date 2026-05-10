@@ -11,6 +11,9 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check python/
       - name: Type check (pyright)
-        run: uv run pyright python/
+        # cd into python/ so pyright auto-discovers `python/pyrightconfig.json`
+        # (it walks up from CWD, not from CLI-arg paths). The config relaxes
+        # Optional access for tests and silences pyauth's private-import noise.
+        run: cd python && uv run pyright src tests
       - name: Tests
         run: uv run pytest python/tests/ -v
