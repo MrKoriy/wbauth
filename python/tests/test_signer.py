@@ -23,16 +23,20 @@ FIXED_NONCE = "test-nonce-fixed"
 # ---------- helpers ----------
 
 
-def get_param(sig_input: str, name: str) -> str | None:
+def get_param(sig_input: str, name: str) -> str:
     """Extract a param value from a Signature-Input header.
 
     Handles both quoted ('keyid="..."') and unquoted ('created=123') params.
+    Test helper — raises AssertionError if the param is missing (every test
+    that calls this expects the param to be present, so a missing param is
+    a test failure, not a None to handle).
     """
     m = re.search(rf';{re.escape(name)}="([^"]+)"', sig_input)
     if m:
         return m.group(1)
     m = re.search(rf';{re.escape(name)}=(\d+)', sig_input)
-    return m.group(1) if m else None
+    assert m is not None, f"param {name!r} not found in: {sig_input!r}"
+    return m.group(1)
 
 
 def make_identity():

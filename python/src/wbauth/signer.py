@@ -43,7 +43,7 @@ DEFAULT_EXPIRES_SECONDS = 60
 """Default expires window. 30s is too short given http-message-signatures'
 5s max_clock_skew + network latency. Pitfall 3."""
 
-DEFAULT_COMPONENTS = ("@authority", "signature-agent")
+DEFAULT_COMPONENTS: tuple[str, ...] = ("@authority", "signature-agent")
 """Cloudflare-safe profile. Do NOT add @query-params or @status. Pitfall 2."""
 
 # ---------- Public dataclass ----------
