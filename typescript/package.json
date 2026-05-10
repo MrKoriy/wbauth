@@ -26,8 +26,17 @@
   "devDependencies": {
     "@biomejs/biome": "^2",
     "@types/node": "^20",
+    "playwright": "^1.59",
     "tsup": "^8",
     "typescript": "^6",
     "vitest": "^4"
+  },
+  "peerDependencies": {
+    "playwright": "^1"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
   }
 }
