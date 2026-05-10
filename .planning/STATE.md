@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Phase 4 context gathered
-last_updated: "2026-05-10T20:00:44.757Z"
+last_updated: "2026-05-10T20:11:10.374Z"
 last_activity: 2026-05-10
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 11
-  percent: 85
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 Phase: 04 (typescript-sdk-framework-integrations) — EXECUTING
 Next phase: 04 (TypeScript SDK & Framework Integrations) — has been runnable in parallel since Phase 1's test vectors locked
-Plan: 2 of 3
-Status: Ready to execute
+Plan: 3 of 3
+Status: Phase complete — ready for verification
 Last activity: 2026-05-10
 
 Progress: [██████████] 100% (3/3 plans complete in Phase 3)
@@ -68,6 +68,8 @@ Progress: [██████████] 100% (3/3 plans complete in Phase 3)
 | Phase 03-hosted-directory-cloudflare-submission P02 | ~50min | 3 tasks + 3 auto-fixed deviations | 9 created, 1 modified |
 | Phase 03-hosted-directory-cloudflare-submission P03 | ~25min | 2 tasks (autonomous + live-run gate) + 1 auto-fixed deviation | 1 created (E2E-RESULT.md), 1 modified (cli.py); script committed in prior session |
 | Phase 04-typescript-sdk-framework-integrations P01 | 8min | 3 tasks | 15 files |
+| Phase 04 P02 | 4min | 2 tasks | 2 files |
+| Phase 04 P03 | 4min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -115,6 +117,11 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase 04]: TS adapter conformance via vi.mock (hoisted) — vi.spyOn cannot intercept top-level imports (Pitfall 2)
 - [Phase 04]: DOM lib added to typescript/tsconfig.json for JsonWebKey + BodyInit DTS emission
 - [Phase 04]: playwright is peerDep optional (not runtime dep) — types-only import keeps fetch-only consumers cost-free
+- [Phase ?]: Plan 04-02 closes D-66 cross-language Identity round-trip oracle (Python PEM → TS sign byte-equal vs vector 01) and Phase 1 vectors.test.ts multi-key skip hand-off via 4 Identity.rotate() tests
+- [Phase ?]: DIST-04 closed via examples/browser_use_demo.py — mock-mode opens BrowserSession + attach_signing against live Worker without requiring an LLM key
+- [Phase ?]: DIST-05 closed via examples/stagehand_demo.ts — consumes Plan 01 TS SDK { Identity, applyTo } from 'wbauth'; mock-mode inits Stagehand with no model (LOCAL+no-act path)
+- [Phase ?]: DIST-06 closed via examples/openai_agents_demo.py — live-smoke mock-mode confirmed signature_input_present:True against Phase 3 Worker (HTTP 200)
+- [Phase ?]: DIST-07 (upstream PRs to Browser Use / Stagehand / mcp-agent) deferred to Phase 5 per D-71 — needs public GitHub repo + author identity for review correspondence
 
 ### Pending Todos
 
@@ -137,7 +144,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T20:00:44.753Z
+Last session: 2026-05-10T20:11:10.371Z
 Stopped at: Phase 4 context gathered
 Resume file: None
 Next plan: Phase 4 first plan (TypeScript SDK adapters with byte-equality vs Phase-1 test vectors). Phase 4 was already cleared to start in parallel since Phase 1 vectors locked; no dependency from Phase 3 directory backend.
