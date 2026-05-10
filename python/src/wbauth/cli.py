@@ -487,16 +487,27 @@ async def _do_register(
         # Step 2: build the SubmitBody and sign the POST itself.
         # Web Bot Auth covered components are @authority + signature-agent
         # (+ content-digest because there's a body) — see signer._components_for.
+        # Omit None-valued optional fields. The Worker's zod schema declares
+        # client_uri / expected_user_agent / purpose as `.optional()` (NOT
+        # `.nullable()`), so emitting explicit JSON `null` triggers a 400
+        # invalid_type rejection. Dict comprehension drops keys whose value
+        # is None; required keys (kid/challenge/client_name/signature_agent_url/
+        # keys) and explicitly-empty `contacts: []` always pass through.
+        # (Discovered during Plan 03-03 E2E run — Rule 1 deviation.)
         body = {
-            "kid": identity.kid,
-            "challenge": challenge,
-            "client_name": client_name,
-            "client_uri": client_uri,
-            "signature_agent_url": canonical_signature_agent,
-            "expected_user_agent": expected_user_agent,
-            "contacts": [],
-            "purpose": purpose,
-            "keys": identity.export_jwks(),
+            k: v
+            for k, v in {
+                "kid": identity.kid,
+                "challenge": challenge,
+                "client_name": client_name,
+                "client_uri": client_uri,
+                "signature_agent_url": canonical_signature_agent,
+                "expected_user_agent": expected_user_agent,
+                "contacts": [],
+                "purpose": purpose,
+                "keys": identity.export_jwks(),
+            }.items()
+            if v is not None
         }
         body_bytes = _json.dumps(body).encode("utf-8")
 
