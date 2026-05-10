@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 Plan 02 complete (register CLI + serve + snapshot workflow)
-last_updated: "2026-05-10T13:35:00.000Z"
-last_activity: 2026-05-10 -- Phase 03 Plan 02 complete (wbauth register/serve + GH Actions snapshot)
+stopped_at: Phase 3 Plan 03 complete (E2E exit-criterion D-52 SATISFIED — STATUS: PARTIAL accepted)
+last_updated: "2026-05-10T14:20:00.000Z"
+last_activity: 2026-05-10 -- Phase 03 Plan 03 complete (E2E exit-criterion against live Worker — STATUS PARTIAL, kid kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I permanent in production D1)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
-  percent: 90
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 ## Current Position
 
-Phase: 03 (hosted-directory-cloudflare-submission) — EXECUTING
-Next phase: 03 (Hosted Directory & Cloudflare Submission)
-Plan: 3 of 3 (next: 03-03 E2E exit gate)
-Status: Executing Phase 03 (Plans 03-01 + 03-02 complete; CLI surface shipped, snapshot workflow ready)
-Last activity: 2026-05-10 -- Phase 03 Plan 02 complete (wbauth register + serve + snapshot workflow)
+Phase: 03 (hosted-directory-cloudflare-submission) — COMPLETE
+Next phase: 04 (TypeScript SDK & Framework Integrations) — has been runnable in parallel since Phase 1's test vectors locked
+Plan: 3 of 3 complete; Phase 3 done
+Status: Phase 03 COMPLETE — D-52 E2E exit criterion SATISFIED (STATUS: PARTIAL accepted per 03-RESEARCH.md §8 NOTE; full external Cloudflare verifier validation deferred to Phase 5 DIST-08)
+Last activity: 2026-05-10 -- Phase 03 Plan 03 complete (E2E live against production Worker; kid kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I permanent in D1)
 
-Progress: [██████▋···] 67% (2/3 plans complete in Phase 3)
+Progress: [██████████] 100% (3/3 plans complete in Phase 3)
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [██████▋···] 67% (2/3 plans complete in Phase 3)
 | Phase 02-python-adapters-policy-inspector P03 | 25min | 3 tasks + 1 deviation | 4 created, 3 modified, 1 renamed |
 | Phase 03-hosted-directory-cloudflare-submission P01 | ~120min | 3 tasks (incl. human-action deploy gate) + 0 deviations | 18 created, 3 modified, 1 deleted |
 | Phase 03-hosted-directory-cloudflare-submission P02 | ~50min | 3 tasks + 3 auto-fixed deviations | 9 created, 1 modified |
+| Phase 03-hosted-directory-cloudflare-submission P03 | ~25min | 2 tasks (autonomous + live-run gate) + 1 auto-fixed deviation | 1 created (E2E-RESULT.md), 1 modified (cli.py); script committed in prior session |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase 3 Plan 02]: `wbauth serve` final executable LOC = 26 (D-50 cap is ≤30); achieved by single-line docstring + `#` comment block (LOC counter excludes `#`-prefixed lines but counts docstring CONTENT lines).
 - [Phase 3 Plan 02]: snapshot.yml ships with workflow_dispatch only; schedule.cron commented out until Phase 5 D-08 resolves (Open Question #3 / Pitfall 7 mitigation — prevents daily "scheduled workflow failed" emails during army leave).
 - [Phase 3 Plan 02]: Pre-existing macOS subprocess flake in tests/test_cli_keygen.py logged in deferred-items.md DEF-03-01; affects 3 of 195 tests on macOS only (CI on Ubuntu unaffected; in-process tests all green).
+- [Phase 3 Plan 03]: D-52 exit criterion SATISFIED with STATUS: PARTIAL (accepted per 03-RESEARCH.md §8 NOTE). Internal register→fetch→sign chain proved end-to-end against live `wbauth.silov801.workers.dev`; Cloudflare research verifier rejected the registered kid because it currently validates ONLY the RFC 9421 test key. Full external verification deferred to Phase 5 DIST-08 (Cloudflare verified-bots submission). Permanent registered kid in production D1: `kkklAFaE0n5cUZ_s9VjgWMtLWPf9GZgM7daY0WL95-I`.
+- [Phase 3 Plan 03]: `_do_register` body builder now filters None-valued optional fields (Rule 1 deviation discovered live). Worker zod schema treats client_uri/expected_user_agent/purpose as `.optional()` not `.nullable()` — explicit JSON null triggered 400 invalid_type. Fix: dict comprehension drops keys whose value is None before json.dumps. Commit a0e8aab.
 
 ### Pending Todos
 
@@ -129,7 +132,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-10T13:35:00.000Z
-Stopped at: Phase 3 Plan 02 complete (CLI surface + snapshot workflow shipped)
-Resume file: .planning/phases/03-hosted-directory-cloudflare-submission/03-03-PLAN.md (or wherever the E2E exit-gate plan lives)
-Next plan: 03-03 (E2E exit gate D-52). Imports `_do_register` from `wbauth.cli`. Hand-off notes in 03-02-SUMMARY.md.
+Last session: 2026-05-10T14:20:00.000Z
+Stopped at: Phase 3 COMPLETE (Plan 03-03 D-52 E2E exit-criterion SATISFIED with STATUS: PARTIAL accepted per 03-RESEARCH.md §8 NOTE)
+Resume file: .planning/phases/04-typescript-sdk-framework-integrations/ (next phase, not yet planned)
+Next plan: Phase 4 first plan (TypeScript SDK adapters with byte-equality vs Phase-1 test vectors). Phase 4 was already cleared to start in parallel since Phase 1 vectors locked; no dependency from Phase 3 directory backend.
+Phase 5 carry-over: DIST-08 will re-run python/scripts/e2e_phase3.py post-Cloudflare-verified-bot submission to flip STATUS PARTIAL → PASS.
