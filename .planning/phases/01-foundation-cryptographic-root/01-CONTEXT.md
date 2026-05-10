@@ -27,7 +27,7 @@ Covers v1 requirements: IDENT-01, IDENT-02, IDENT-03, IDENT-04, IDENT-05, IDENT-
 - **D-07: PROJECT.md naming references are aliases, not blockers.** All earlier mentions of `agentpassport.dev` / `agentpassport` in PROJECT.md, REQUIREMENTS.md, ROADMAP.md, and research/* are working names that planner should treat as `wbauth` going forward. Update files in Phase 1 as part of repo scaffold.
 
 ### Repository Hosting
-- **D-08: GitHub account/org choice deferred.** User will decide between personal account and new `wbauth` org at the moment of `git remote add` (planner: leave this as an open knob in scaffolding tasks; do not hardcode an org name in workflows or pyproject.toml).
+- **D-08: GitHub account/org RESOLVED (2026-05-11): personal account `MrKoriy`.** Repo URL: `https://github.com/MrKoriy/wbauth`, public, primary branch `main`. Original deferral text: "User will decide between personal account and new `wbauth` org at the moment of `git remote add`." Decision made before Phase 5: personal account (clear attribution, calling-card story; org rename is reversible if needed post-army). Phase 5 hardening can now: (a) enable snapshot workflow cron (DIR-05), (b) file Cloudflare verified-bot submission with public repo URL (DIST-08), (c) submit upstream PRs to Browser Use/Stagehand/mcp-agent (DIST-07).
 
 ### Claude's Discretion (areas user delegated)
 
