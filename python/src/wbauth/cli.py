@@ -183,6 +183,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="The User-Agent string verifiers should expect from this agent.",
     )
 
+    # ---- serve (Phase 3, CLI-05, D-50) -------------------------------------
+    sv = sub.add_parser(
+        "serve",
+        help="Serve a single JWKS file at the well-known path.",
+        description=(
+            "Stdlib http.server-based static JWKS host (≤30 LOC). "
+            "Serves /.well-known/http-message-signatures-directory/{kid} for "
+            "any kid in the supplied JWKS file. Self-hosting alternative to "
+            "the hosted directory at https://wbauth.silov801.workers.dev. "
+            "NO registration, NO list endpoints — that's what the hosted "
+            "directory is for."
+        ),
+    )
+    sv.add_argument(
+        "--jwks", required=True,
+        help="Path to the JWKS JSON file (from `wbauth keygen --jwks-output`).",
+    )
+    sv.add_argument("--port", type=int, default=8080, help="TCP port (default: 8080).")
+
     return parser
 
 
@@ -375,6 +394,31 @@ def _dispatch_keygen(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------- serve handler (CLI-05, D-50) ----------
+
+
+def _dispatch_serve(args: argparse.Namespace) -> int:
+    """CLI-05 + D-50 handler.
+
+    Lazy-imports the server module so `wbauth keygen` startup stays fast
+    (matches the lazy-import pattern used by `_dispatch_verify`).
+
+    Exit codes:
+      - 0: serve_forever returned cleanly (only happens if the caller injects
+        a shutdown — practically unreachable from the CLI surface).
+      - 130: Ctrl-C / SIGINT. The outer `main()` also catches KeyboardInterrupt
+        and returns 130; this explicit handler is belt-and-suspenders so direct
+        callers of `_dispatch_serve` (e.g. unit tests) get the right code too.
+    """
+    from ._http_server.jwks_server import serve
+
+    try:
+        serve(args.jwks, args.port)
+    except KeyboardInterrupt:
+        return 130
+    return 0
+
+
 # ---------- register handler (CLI-04, D-49) ----------
 
 
@@ -542,6 +586,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _dispatch_verify(args)
     if args.cmd == "register":
         return _dispatch_register(args)
+    if args.cmd == "serve":
+        return _dispatch_serve(args)
     return 1
 
 

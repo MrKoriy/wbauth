@@ -39,11 +39,25 @@ def jwks_file(tmp_path):
 
 
 def _start_server(jwks_path, port):
-    """Helper — start server in a daemon thread, give it 0.3s to bind."""
+    """Helper — start server in a daemon thread, poll until it accepts connections.
+
+    Polling beats a fixed `time.sleep(0.3)` because thread-startup latency on
+    a loaded machine can blow past 300ms; the resulting flake (request times
+    out before the bind completes) was observed during dev.
+    """
     t = threading.Thread(target=serve, args=(str(jwks_path), port), daemon=True)
     t.start()
-    time.sleep(0.3)
-    return t
+    # Poll up to 2s for the server to accept a TCP connection.
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline:
+        try:
+            with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+                s.settimeout(0.1)
+                s.connect(("127.0.0.1", port))
+            return t
+        except (ConnectionRefusedError, OSError):
+            time.sleep(0.05)
+    raise RuntimeError(f"server on port {port} did not start within 2s")
 
 
 def test_make_handler_returns_class(jwks_file):
