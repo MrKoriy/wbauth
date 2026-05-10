@@ -7,7 +7,6 @@ asserts both the verdict literal and that key reason strings are present.
 from __future__ import annotations
 
 import httpx
-import pytest
 
 from wbauth.policy.errors import RobotsParseError
 from wbauth.policy.policy import (

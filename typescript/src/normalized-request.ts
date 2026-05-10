@@ -10,12 +10,12 @@
  * and Signature-Agent are written back so the caller can read them out.
  */
 export interface NormalizedRequest {
-  /** HTTP method ("GET" | "POST" | "PUT" | "PATCH" | "DELETE" | ...). */
-  method: string;
-  /** Absolute URL — must be https:// for production targets. */
-  url: string;
-  /** Mutable header dict. sign() writes Signature, Signature-Input, Signature-Agent. */
-  headers: Record<string, string>;
-  /** Body bytes for content-digest computation; null/undefined for bodiless methods. */
-  body: Uint8Array | null;
+	/** HTTP method ("GET" | "POST" | "PUT" | "PATCH" | "DELETE" | ...). */
+	method: string;
+	/** Absolute URL — must be https:// for production targets. */
+	url: string;
+	/** Mutable header dict. sign() writes Signature, Signature-Input, Signature-Agent. */
+	headers: Record<string, string>;
+	/** Body bytes for content-digest computation; null/undefined for bodiless methods. */
+	body: Uint8Array | null;
 }

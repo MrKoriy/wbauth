@@ -169,7 +169,7 @@ async def main() -> int:
                 return 1
 
         if r.status_code == 200 and SUCCESS_BANNER in r.text:
-            print(f"[5/5] PASS: Cloudflare research verifier accepted (status=200)", file=sys.stderr)
+            print("[5/5] PASS: Cloudflare research verifier accepted (status=200)", file=sys.stderr)
             print("STATUS: PASS", file=sys.stderr)
             return 0
         if r.status_code == 200 and FAILURE_BANNER in r.text:

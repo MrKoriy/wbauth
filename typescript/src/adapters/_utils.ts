@@ -17,15 +17,15 @@ const DIGEST_METHODS = new Set(["POST", "PUT", "PATCH"]);
  * - the request already carries a Content-Digest header (case-insensitive).
  */
 export function ensureContentDigest(
-  method: string,
-  headers: Record<string, string>,
-  body: Uint8Array | null,
+	method: string,
+	headers: Record<string, string>,
+	body: Uint8Array | null,
 ): void {
-  if (!body || body.byteLength === 0) return;
-  if (!DIGEST_METHODS.has(method.toUpperCase())) return;
-  if (Object.keys(headers).some((k) => k.toLowerCase() === "content-digest")) {
-    return;
-  }
-  const b64 = createHash("sha256").update(body).digest("base64");
-  headers["Content-Digest"] = `sha-256=:${b64}:`;
+	if (!body || body.byteLength === 0) return;
+	if (!DIGEST_METHODS.has(method.toUpperCase())) return;
+	if (Object.keys(headers).some((k) => k.toLowerCase() === "content-digest")) {
+		return;
+	}
+	const b64 = createHash("sha256").update(body).digest("base64");
+	headers["Content-Digest"] = `sha-256=:${b64}:`;
 }

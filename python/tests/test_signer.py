@@ -10,11 +10,8 @@ Signature value is also reproducible — used in test_signature_value_is_determi
 from __future__ import annotations
 
 import datetime
-import io
 import re
-import sys
 
-import pytest
 
 SIG_AGENT_URL = "https://example.test/"
 URL = "https://crawltest.com/cdn-cgi/web-bot-auth"

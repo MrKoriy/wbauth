@@ -12,12 +12,13 @@
  *   const sf = createSignedFetch(id);
  *   const res = await sf("https://api.example.com/data");
  */
-export { sign } from "./signer.js";
-export type { SignatureHeaders, SignOptions } from "./signer.js";
-export { Identity, DEFAULT_KEY_PATH } from "./identity.js";
-export type { IdentityOptions, KeyPair } from "./identity.js";
-export type { NormalizedRequest } from "./normalized-request.js";
+
 export { createSignedFetch } from "./adapters/fetch.js";
 export { applyTo } from "./adapters/playwright.js";
+export type { IdentityOptions, KeyPair } from "./identity.js";
+export { DEFAULT_KEY_PATH, Identity } from "./identity.js";
+export type { NormalizedRequest } from "./normalized-request.js";
+export type { SignatureHeaders, SignOptions } from "./signer.js";
+export { sign } from "./signer.js";
 
 export const VERSION = "0.1.0";

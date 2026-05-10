@@ -1,42 +1,44 @@
 {
-  "name": "wbauth",
-  "version": "0.1.0",
-  "description": "Web Bot Auth (RFC 9421) TypeScript SDK",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    }
-  },
-  "files": ["dist"],
-  "license": "Apache-2.0",
-  "scripts": {
-    "build": "tsup",
-    "test": "vitest run",
-    "lint": "biome check ."
-  },
-  "dependencies": {
-    "web-bot-auth": "^0.1.3"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2",
-    "@types/node": "^20",
-    "playwright": "^1.59",
-    "tsup": "^8",
-    "typescript": "^6",
-    "vitest": "^4"
-  },
-  "peerDependencies": {
-    "playwright": "^1"
-  },
-  "peerDependenciesMeta": {
-    "playwright": {
-      "optional": true
-    }
-  }
+	"name": "wbauth",
+	"version": "0.1.0",
+	"description": "Web Bot Auth (RFC 9421) TypeScript SDK",
+	"type": "module",
+	"main": "./dist/index.js",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"license": "Apache-2.0",
+	"scripts": {
+		"build": "tsup",
+		"test": "vitest run",
+		"lint": "biome check ."
+	},
+	"dependencies": {
+		"web-bot-auth": "^0.1.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2",
+		"@types/node": "^20",
+		"playwright": "^1.59",
+		"tsup": "^8",
+		"typescript": "^6",
+		"vitest": "^4"
+	},
+	"peerDependencies": {
+		"playwright": "^1"
+	},
+	"peerDependenciesMeta": {
+		"playwright": {
+			"optional": true
+		}
+	}
 }

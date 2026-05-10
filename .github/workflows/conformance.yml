@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --all-packages
       - name: Cloudflare research-verifier smoke test
         run: uv run python -m wbauth._smoke.cloudflare_debug
         # Same script the dedicated cloudflare-debug.yml workflow runs daily.
