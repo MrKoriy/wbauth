@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 Plan 01 complete (Worker live + smoke green)
-last_updated: "2026-05-04T22:30:00.000Z"
-last_activity: 2026-05-04 -- Phase 03 Plan 01 complete (Worker deployed + smoke-tested)
+stopped_at: Phase 3 Plan 02 complete (register CLI + serve + snapshot workflow)
+last_updated: "2026-05-10T13:35:00.000Z"
+last_activity: 2026-05-10 -- Phase 03 Plan 02 complete (wbauth register/serve + GH Actions snapshot)
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
@@ -27,11 +27,11 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 Phase: 03 (hosted-directory-cloudflare-submission) — EXECUTING
 Next phase: 03 (Hosted Directory & Cloudflare Submission)
-Plan: 2 of 3 (next: 03-02 register CLI + snapshot job + serve)
-Status: Executing Phase 03 (Plan 03-01 complete; Worker live at https://wbauth.silov801.workers.dev)
-Last activity: 2026-05-04 -- Phase 03 Plan 01 complete (Worker deployed + smoke-tested)
+Plan: 3 of 3 (next: 03-03 E2E exit gate)
+Status: Executing Phase 03 (Plans 03-01 + 03-02 complete; CLI surface shipped, snapshot workflow ready)
+Last activity: 2026-05-10 -- Phase 03 Plan 02 complete (wbauth register + serve + snapshot workflow)
 
-Progress: [███▎······] 33% (1/3 plans complete in Phase 3)
+Progress: [██████▋···] 67% (2/3 plans complete in Phase 3)
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [███▎······] 33% (1/3 plans complete in Phase 3)
 | Phase 02-python-adapters-policy-inspector P02 | 30min | 3 tasks + 2 deviations | 24 created, 1 modified |
 | Phase 02-python-adapters-policy-inspector P03 | 25min | 3 tasks + 1 deviation | 4 created, 3 modified, 1 renamed |
 | Phase 03-hosted-directory-cloudflare-submission P01 | ~120min | 3 tasks (incl. human-action deploy gate) + 0 deviations | 18 created, 3 modified, 1 deleted |
+| Phase 03-hosted-directory-cloudflare-submission P02 | ~50min | 3 tasks + 3 auto-fixed deviations | 9 created, 1 modified |
 
 ## Accumulated Context
 
@@ -101,6 +102,11 @@ Key decisions affecting current work (from PROJECT.md):
 - [Phase 3 Plan 01]: Hono 4.12.16 chosen as Worker framework (D-54); managed wrangler migrations under directory/migrations/ replace Phase-1 schema.sql (D-55); rotation procedure documented in directory/README.md (D-56); module organization src/{routes/,blocklist,ratelimit,signing,schemas,env,index} flat-with-routes-subdir (D-57).
 - [Phase 3 Plan 01]: DIRECTORY_PRIVATE_JWK stored as JSON-stringified JWK (kty,crv,kid,d,x) — NOT PKCS8 PEM (Open Question #2 resolution); web-bot-auth/crypto.signerFromJWK accepts JWK natively, sidesteps Workers WebCrypto Ed25519 PKCS8 import ambiguity.
 - [Phase 3 Plan 01]: Blocklist enforcement at /register/submit only (NOT /register/challenge) — challenge body schema doesn't carry client_name; per-IP rate limit (10/IP/day shared across challenge+submit) bounds enumeration. Documented in 03-01-SUMMARY.md as design choice; soft-gap noted for verifier reassessment.
+- [Phase 3 Plan 02]: `_do_register` two-load pattern for canonical Signature-Agent URL (T-03-17 mitigation): first load_or_generate with placeholder URL to read deterministic kid, second load_or_generate with canonical kid-aware URL so produced signature commits to it.
+- [Phase 3 Plan 02]: `_do_register` Content-Digest pre-compute via existing `wbauth.adapters._utils.ensure_content_digest` — signer auto-includes `content-digest` covered component for POST+body but requires header pre-set; deviation Rule 1 caught by failing test, fixed by reusing Phase 2 helper (no new code).
+- [Phase 3 Plan 02]: `wbauth serve` final executable LOC = 26 (D-50 cap is ≤30); achieved by single-line docstring + `#` comment block (LOC counter excludes `#`-prefixed lines but counts docstring CONTENT lines).
+- [Phase 3 Plan 02]: snapshot.yml ships with workflow_dispatch only; schedule.cron commented out until Phase 5 D-08 resolves (Open Question #3 / Pitfall 7 mitigation — prevents daily "scheduled workflow failed" emails during army leave).
+- [Phase 3 Plan 02]: Pre-existing macOS subprocess flake in tests/test_cli_keygen.py logged in deferred-items.md DEF-03-01; affects 3 of 195 tests on macOS only (CI on Ubuntu unaffected; in-process tests all green).
 
 ### Pending Todos
 
@@ -123,7 +129,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-04T22:30:00.000Z
-Stopped at: Phase 3 Plan 01 complete (Worker live + smoke green)
-Resume file: .planning/phases/03-hosted-directory-cloudflare-submission/03-02-PLAN.md
-Next plan: 03-02 (register CLI + snapshot job + serve). Live URL contract: https://wbauth.silov801.workers.dev. Hand-off notes in 03-01-SUMMARY.md.
+Last session: 2026-05-10T13:35:00.000Z
+Stopped at: Phase 3 Plan 02 complete (CLI surface + snapshot workflow shipped)
+Resume file: .planning/phases/03-hosted-directory-cloudflare-submission/03-03-PLAN.md (or wherever the E2E exit-gate plan lives)
+Next plan: 03-03 (E2E exit gate D-52). Imports `_do_register` from `wbauth.cli`. Hand-off notes in 03-02-SUMMARY.md.
