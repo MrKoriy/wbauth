@@ -39,16 +39,7 @@ dev = [
     "responses",
 ]
 
-[tool.pyright]
-include = ["src", "tests"]
-# Library-import noise: pyauth's http_message_signatures re-exports work at
-# runtime but trip pyright's strict private-import rule. Same for
-# `algorithms.ED25519`. These are not real type errors.
-reportPrivateImportUsage = false
-# Relaxed checks for test code — tests routinely access .group()/.value on
-# match/cache results that are statically Optional but always present at the
-# assertion point. Enforcing these in tests would mean wrapping every assertion
-# in `assert x is not None` boilerplate without any safety benefit.
-executionEnvironments = [
-    { root = "tests", reportOptionalMemberAccess = "none", reportOptionalCall = "none", reportOptionalSubscript = "none", reportArgumentType = "none" },
-]
+# Pyright config lives in `python/pyrightconfig.json` — pyright auto-discovers
+# it regardless of the invocation working directory (a [tool.pyright] block in
+# this pyproject.toml is only picked up when pyright is run with this exact
+# pyproject as its config-discovery root, which CI doesn't do).
