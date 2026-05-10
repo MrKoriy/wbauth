@@ -45,7 +45,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DIR-02**: Registration uses proof-of-key-ownership flow: server issues nonce, caller signs with claimed private key, server verifies via the same code path the SDK exports; no email, no OAuth, no third-party identity provider
 - [x] **DIR-03**: Backend serves `GET /.well-known/http-message-signatures-directory/{id}` returning JWKS with `Content-Type: application/http-message-signatures-directory+json`; the directory response itself is signed
 - [x] **DIR-04**: Read endpoints CDN-cached with `Cache-Control: public, max-age=300` on `/.well-known/.../{kid}` [Pitfall 1 amendment: NOT immutable — multi-key rotation can mutate the JWKS doc]; per-IP rate limiting on registration (10/day); reserved-name blocklist (12 tokens × 3 suffixes per D-43)
-- [ ] **DIR-05**: Snapshot job mirrors full directory to `/static/all.json` and to a GitHub Pages mirror nightly (disaster recovery — works even if backend is down)
+- [x] **DIR-05**: Snapshot job mirrors full directory to `/static/all.json` and to a GitHub Pages mirror nightly (disaster recovery — works even if backend is down) [Phase 3 Plan 02: workflow_dispatch only; cron commented out per Pitfall 7 until Phase 5 D-08 resolves]
 - [x] **DIR-06**: Hosting confirmed working with Russian payment card on day 1 (Fly.io primary; Railway fallback; Cloudflare Workers + D1 zero-billing fallback if both rejected); domain auto-renewal enabled for >18 months
 - [x] **DIR-07**: Zero-billing posture confirmed: Workers Free tier (100k req/day) + D1 Free tier (5GB / 5M reads/day); D-47 forbids any Workers Paid features. Abuse vectors handled via blocklist (D-43/D-44) + per-IP rate limit (10/day, D-40+D-48); manual review queue deferred to v2 (no UI in v1).
 - [ ] **DIR-08**: End-to-end flow validated: register identity → sign HTTP request via SDK → Cloudflare debug endpoint confirms verification passes using the registered directory URL
@@ -60,8 +60,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CLI-01**: `wbauth keygen [--output PATH]` generates Ed25519 keypair, writes private key with `0o600`, prints public JWK fingerprint
 - [x] **CLI-02**: `wbauth inspect <url>` runs the policy inspector and prints structured `SitePolicy` (machine-readable JSON via `--json`; human-readable summary by default with verdict + reasons)
 - [x] **CLI-03**: `wbauth verify --domain <domain>` runs Cloudflare's debug verifier against the user's identity and prints pass/fail per criterion (canonicalization, header presence, expiry window, signed components)
-- [ ] **CLI-04**: `wbauth register --directory <url> --identity <path>` publishes identity to the hosted directory using the proof-of-ownership flow
-- [ ] **CLI-05**: `wbauth serve [--port N]` runs a local self-hostable JWKS directory server (FastAPI) for users who don't want to depend on agentpassport.dev
+- [x] **CLI-04**: `wbauth register --directory <url> --identity <path>` publishes identity to the hosted directory using the proof-of-ownership flow
+- [x] **CLI-05**: `wbauth serve [--port N]` runs a local self-hostable JWKS directory server (~30 LOC stdlib http.server per D-50; original "FastAPI" wording superseded by Phase 3 D-50) for users who don't want to depend on agentpassport.dev
 - [x] **CLI-06**: All CLI commands return non-zero exit codes on failure and emit machine-readable errors to stderr
 
 ### Distribution & Documentation
@@ -163,15 +163,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIR-02 | Phase 3 | Complete |
 | DIR-03 | Phase 3 | Complete |
 | DIR-04 | Phase 3 | Complete |
-| DIR-05 | Phase 3 | Pending |
+| DIR-05 | Phase 3 | Complete |
 | DIR-06 | Phase 1 | Complete |
 | DIR-07 | Phase 3 | Complete |
 | DIR-08 | Phase 3 | Pending |
 | CLI-01 | Phase 2 | Complete |
 | CLI-02 | Phase 2 | Complete |
 | CLI-03 | Phase 2 | Complete |
-| CLI-04 | Phase 3 | Pending |
-| CLI-05 | Phase 3 | Pending |
+| CLI-04 | Phase 3 | Complete |
+| CLI-05 | Phase 3 | Complete |
 | CLI-06 | Phase 2 | Complete |
 | DIST-01 | Phase 5 | Pending |
 | DIST-02 | Phase 5 | Pending |
