@@ -1,0 +1,46 @@
+# .github/workflows/snapshot.yml
+# Phase 3 DIR-05: nightly directory snapshot to gh-pages.
+#
+# Cron is COMMENTED OUT until Phase 5 resolves D-08 (GitHub remote / org choice).
+# Until then, the workflow can be triggered manually via:
+#   gh workflow run nightly-directory-snapshot
+# Phase 5 will:
+#   - Set up the GitHub remote
+#   - Confirm gh-pages branch exists (or peaceiris@v4 will create it on first push)
+#   - Uncomment the `schedule.cron` line below
+#
+# This was an explicit Open Question #3 resolution + Pitfall 7 mitigation:
+# enabling the cron now would email "scheduled workflow failed" daily until
+# the gh-pages branch / remote-org existed.
+name: nightly-directory-snapshot
+
+on:
+  workflow_dispatch: {}
+  # TODO(Phase 5, D-08): uncomment once GitHub remote is set up
+  # schedule:
+  #   - cron: '0 2 * * *'   # 02:00 UTC daily (D-45)
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required for GITHUB_TOKEN to push to gh-pages
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run snapshot script
+        env:
+          DIRECTORY_URL: https://wbauth.silov801.workers.dev
+          OUT_DIR: ./snapshot-build/snapshots
+        run: bash scripts/snapshot.sh
+
+      - name: Deploy to gh-pages
+        # peaceiris/actions-gh-pages@v4 — D-45 chose this over actions/deploy-pages@v4
+        # because it pushes file artifacts to a branch (vs full-Pages-deploy upload),
+        # which matches the "DR-style mirror under snapshots/" output shape.
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./snapshot-build
+          publish_branch: gh-pages
+          keep_files: true   # don't blow away other gh-pages content
