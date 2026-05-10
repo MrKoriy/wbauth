@@ -79,6 +79,19 @@ def _build_parser() -> argparse.ArgumentParser:
             "value goes into Identity construction in code."
         ),
     )
+    # Phase 3, D-51: optional JWKS dump for self-hosters who'll feed it into
+    # `wbauth serve` (CLI-05) or publish at their own well-known path. Keeping
+    # the flag opt-in preserves Phase 1 IDENT-01 behavior (no extra files
+    # written by default).
+    kg.add_argument(
+        "--jwks-output",
+        default=None,
+        help=(
+            "If set, also write the public JWKS document (no private key) "
+            "to this path. Pair with `wbauth serve --jwks <path>` for a "
+            "stdlib JWKS host (CLI-05)."
+        ),
+    )
 
     # ---- inspect (Phase 2, CLI-02) -----------------------------------------
     insp = sub.add_parser(
@@ -140,6 +153,34 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Emit machine-readable JSON to stdout (strips raw signature material).",
+    )
+
+    # ---- register (Phase 3, CLI-04, D-49) ----------------------------------
+    reg = sub.add_parser(
+        "register",
+        help="Register an Identity with the hosted directory (proof-of-key-ownership).",
+        description=(
+            "Two-step proof-of-key-ownership flow per D-38. "
+            "(1) POST /register/challenge → receive nonce. "
+            "(2) Sign + POST /register/submit. "
+            "Defaults to the production directory at "
+            "https://wbauth.silov801.workers.dev. "
+            "Exit 0 on success, 1 on rejection."
+        ),
+    )
+    reg.add_argument("--identity", required=True, help="Path to private key PEM.")
+    reg.add_argument(
+        "--directory",
+        default="https://wbauth.silov801.workers.dev",
+        help="Directory base URL (default: production Phase 3 Worker).",
+    )
+    reg.add_argument("--client-name", default=None, help="Public agent name.")
+    reg.add_argument("--purpose", default=None, help="Why this agent exists.")
+    reg.add_argument("--client-uri", default=None, help="Public homepage URL.")
+    reg.add_argument(
+        "--expected-user-agent",
+        default=None,
+        help="The User-Agent string verifiers should expect from this agent.",
     )
 
     return parser
@@ -320,6 +361,169 @@ def _dispatch_keygen(args: argparse.Namespace) -> int:
         return 2
     print(f"Wrote key to {args.output} (mode 0o600)")
     print(f"kid: {identity.kid}")
+    # D-51: optional JWKS dump for self-hosters. Only the public material —
+    # `Identity.export_jwks()` returns {kty, crv, kid, x} (never `d`), so
+    # this file is safe to publish at /.well-known/... or feed into
+    # `wbauth serve` (CLI-05). Pretty-printed (indent=2) so users can `cat` it.
+    if getattr(args, "jwks_output", None):
+        from pathlib import Path
+
+        Path(args.jwks_output).write_text(
+            json.dumps(identity.export_jwks(), indent=2)
+        )
+        print(f"Wrote JWKS to {args.jwks_output}")
+    return 0
+
+
+# ---------- register handler (CLI-04, D-49) ----------
+
+
+async def _do_register(
+    *,
+    identity_path: str,
+    directory_url: str,
+    client_name: str,
+    purpose: str | None,
+    client_uri: str | None,
+    expected_user_agent: str | None,
+) -> dict:
+    """Two-step proof-of-key-ownership flow per D-38.
+
+    Returns the directory's JSON response on success
+    (``{"kid": ..., "directory_url": ...}``).
+    Raises ``httpx.HTTPStatusError`` on directory rejection (4xx/5xx) — the
+    CLI handler turns that into exit 1 + stderr message.
+
+    L-02 / Pitfall 5: re-uses Phase 1's ``wbauth.signer.sign`` primitive
+    verbatim. Do NOT re-implement RFC 9421 inline here; the import path is
+    discoverable via ``grep "from .signer import sign" python/src/wbauth/cli.py``
+    and the audit guard in 03-02-PLAN.md.
+
+    Module-importable for Plan 03-03's E2E exit script — the task's
+    ``files_modified.contains: "_do_register"`` is the contract.
+    """
+    import datetime
+    import json as _json
+
+    import httpx
+
+    from .identity import Identity
+    from .normalized_request import NormalizedRequest
+    from .signer import sign
+
+    # Compute the canonical Signature-Agent URL upfront. The kid is the RFC 7638
+    # thumbprint of the public key — deterministic, no server round-trip needed.
+    # Strategy: load_or_generate once with a placeholder URL just to read .kid,
+    # then re-load with the canonical URL so the produced signature commits to
+    # the right value (T-03-17 mitigation). The second load_or_generate hits the
+    # existing-file path; cost is one PEM parse, no fresh keygen.
+    temp_identity = Identity.load_or_generate(
+        identity_path,
+        signature_agent_url=(
+            f"{directory_url}/.well-known/http-message-signatures-directory/_temp"
+        ),
+    )
+    canonical_signature_agent = (
+        f"{directory_url}/.well-known/http-message-signatures-directory/{temp_identity.kid}"
+    )
+    identity = Identity.load_or_generate(
+        identity_path,
+        signature_agent_url=canonical_signature_agent,
+    )
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        # Step 1: POST /register/challenge {kid} → {challenge, expires_at}.
+        r1 = await client.post(
+            f"{directory_url}/register/challenge",
+            json={"kid": identity.kid},
+        )
+        r1.raise_for_status()
+        challenge = r1.json()["challenge"]
+
+        # Step 2: build the SubmitBody and sign the POST itself.
+        # Web Bot Auth covered components are @authority + signature-agent
+        # (+ content-digest because there's a body) — see signer._components_for.
+        body = {
+            "kid": identity.kid,
+            "challenge": challenge,
+            "client_name": client_name,
+            "client_uri": client_uri,
+            "signature_agent_url": canonical_signature_agent,
+            "expected_user_agent": expected_user_agent,
+            "contacts": [],
+            "purpose": purpose,
+            "keys": identity.export_jwks(),
+        }
+        body_bytes = _json.dumps(body).encode("utf-8")
+
+        submit_url = f"{directory_url}/register/submit"
+        # Phase 1's sign() is the SOURCE OF TRUTH (Pitfall 5).
+        # Pre-compute Content-Digest before signing — the signer auto-adds
+        # `content-digest` to the covered components for POST+body and would
+        # otherwise raise "Covered header field 'content-digest' not found".
+        # Helper lives in adapters/_utils.py (RFC 9530 sha-256, structured-fields).
+        from .adapters._utils import ensure_content_digest
+
+        req = NormalizedRequest(method="POST", url=submit_url, headers={}, body=body_bytes)
+        ensure_content_digest("POST", req.headers, body_bytes)
+        sig = sign(
+            req, identity,
+            created=datetime.datetime.now(datetime.timezone.utc),
+        )
+
+        # Forward Content-Digest if the signer added one (it does for POST+body).
+        outbound_headers = {
+            "content-type": "application/json",
+            "Signature": sig.signature,
+            "Signature-Input": sig.signature_input,
+            "Signature-Agent": sig.signature_agent,
+        }
+        if "Content-Digest" in req.headers:
+            outbound_headers["Content-Digest"] = req.headers["Content-Digest"]
+
+        r2 = await client.post(
+            submit_url,
+            content=body_bytes,
+            headers=outbound_headers,
+        )
+        r2.raise_for_status()
+        return r2.json()
+
+
+def _dispatch_register(args: argparse.Namespace) -> int:
+    """CLI-04 + D-49 handler.
+
+    Returns 0 on successful registration, 1 on rejection. Errors and rejection
+    reasons go to stderr (CLI-06); the success line goes to stdout.
+
+    Lazy-imports httpx so `wbauth keygen` startup stays fast (matches the
+    pattern used by `_dispatch_verify`).
+    """
+    import httpx
+
+    # If client_name not supplied, prompt interactively. D-49 specifies "prompts
+    # for client_name and purpose (or accepts --client-name/--purpose args)".
+    client_name = args.client_name or input("client_name: ").strip()
+    try:
+        result = asyncio.run(_do_register(
+            identity_path=args.identity,
+            directory_url=args.directory,
+            client_name=client_name,
+            purpose=args.purpose,
+            client_uri=args.client_uri,
+            expected_user_agent=args.expected_user_agent,
+        ))
+    except httpx.HTTPStatusError as e:
+        print(
+            f"error: registration rejected: HTTP {e.response.status_code} "
+            f"{e.response.text}",
+            file=sys.stderr,
+        )
+        return 1
+    except Exception as e:  # noqa: BLE001 — last-resort error path (CLI-06)
+        print(f"error: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(f"Registered. directory_url: {result['directory_url']}")
     return 0
 
 
@@ -336,6 +540,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _dispatch_inspect(args)
     if args.cmd == "verify":
         return _dispatch_verify(args)
+    if args.cmd == "register":
+        return _dispatch_register(args)
     return 1
 
 
