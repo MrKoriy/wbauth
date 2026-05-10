@@ -5,11 +5,12 @@
  * - applyTo(page, identity) registers a signing handler on Stagehand's
  *   underlying Playwright page (raw `stagehand.context.pages()[0]`).
  *   Every outgoing request carries Web Bot Auth (RFC 9421) signatures.
- * - Real-mode (with OPENAI_API_KEY): runs `stagehand.observe(...)` —
- *   read-only, smaller LLM cost than `stagehand.act(...)` — against
- *   https://example.com.
- * - Mock-mode (no OPENAI_API_KEY): skips Stagehand's LLM-driven calls
- *   and just navigates to our directory Worker
+ * - Real-mode: runs `stagehand.observe(...)` — read-only, smaller LLM
+ *   cost than `stagehand.act(...)` — against https://example.com.
+ *   Routes through **OpenRouter** by default (one key → many models);
+ *   falls back to direct OpenAI if only OPENAI_API_KEY is set.
+ * - Mock-mode (no LLM key): skips Stagehand's LLM-driven calls and
+ *   just navigates to our directory Worker
  *   (https://wbauth.silov801.workers.dev/agents). The page.on("request")
  *   listener prints the signed Signature header — the verification
  *   anchor that proves the SDK API surface works without an LLM.
@@ -21,7 +22,13 @@
  *   # Mock mode (no key required):
  *   npx tsx examples/stagehand_demo.ts
  *
- *   # Real mode (LLM key drives stagehand.observe):
+ *   # Real mode via OpenRouter (recommended — one key, all models):
+ *   OPENROUTER_API_KEY=sk-or-... npx tsx examples/stagehand_demo.ts
+ *   # Optional: pick a model
+ *   OPENROUTER_API_KEY=sk-or-... WBAUTH_MODEL=anthropic/claude-3.5-sonnet \\
+ *     npx tsx examples/stagehand_demo.ts
+ *
+ *   # Real mode via direct OpenAI (legacy):
  *   OPENAI_API_KEY=sk-... npx tsx examples/stagehand_demo.ts
  *
  * Pitfalls:
@@ -59,16 +66,50 @@ async function previewKid(path: string): Promise<string> {
   }
 }
 
+interface LlmConfig {
+  model: string;
+  modelClientOptions: { apiKey: string; baseURL?: string };
+  provider: string;
+}
+
+function buildLlmConfig(): LlmConfig | null {
+  // Priority: OPENROUTER_API_KEY (one key, many models) → OPENAI_API_KEY.
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  if (openrouterKey) {
+    const model = process.env.WBAUTH_MODEL ?? "openai/gpt-4o-mini";
+    return {
+      model,
+      // Stagehand model names are provider-prefixed (`openai/gpt-4o`),
+      // matching OpenRouter's naming — no extra translation needed.
+      modelClientOptions: {
+        apiKey: openrouterKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      },
+      provider: "OpenRouter",
+    };
+  }
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    const model = process.env.WBAUTH_MODEL ?? "openai/gpt-4o-mini";
+    return {
+      model,
+      modelClientOptions: { apiKey: openaiKey },
+      provider: "OpenAI",
+    };
+  }
+  return null;
+}
+
 async function main(): Promise<void> {
-  const hasLlmKey = !!process.env.OPENAI_API_KEY;
-  console.log(`[demo] ${hasLlmKey ? "Real" : "Mock"} mode`);
+  const llm = buildLlmConfig();
+  const hasLlmKey = llm !== null;
+  console.log(
+    `[demo] ${hasLlmKey ? `Real mode (${llm!.provider}, model=${llm!.model})` : "Mock mode"}`,
+  );
 
   const stagehand = new Stagehand({
     env: "LOCAL",
-    ...(hasLlmKey ? { model: "openai/gpt-4o" } : {}),
-    modelClientOptions: hasLlmKey
-      ? { apiKey: process.env.OPENAI_API_KEY }
-      : undefined,
+    ...(llm ? { model: llm.model, modelClientOptions: llm.modelClientOptions } : {}),
     localBrowserLaunchOptions: { headless: true },
   });
   await stagehand.init();

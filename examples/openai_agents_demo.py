@@ -3,31 +3,43 @@
 What this demonstrates:
 - WebBotAuth(identity) + httpx.Client used inside an OpenAI Agents SDK
   @function_tool. The Agent's tool makes signed HTTP requests to a
-  third-party URL. (We do NOT sign requests TO openai.com — only the
-  outbound requests the Agent's tools make.)
-- Real-mode (with OPENAI_API_KEY): runs Runner.run() with a real Agent
-  that decides to call the tool against a benign URL.
-- Mock-mode (no OPENAI_API_KEY): skips the Agent + Runner entirely and
-  calls signed_get directly against our directory Worker
+  third-party URL. (We do NOT sign requests TO the LLM provider — only
+  the outbound requests the Agent's tools make.)
+- Real-mode: runs Runner.run() with a real Agent that decides to call
+  the tool. Routed through **OpenRouter** by default
+  (single key → many models: openai/gpt-4o, anthropic/claude-3.5-sonnet,
+  meta-llama/..., etc.). Falls back to direct OpenAI if only
+  OPENAI_API_KEY is set.
+- Mock-mode (no LLM key): skips the Agent + Runner entirely and calls
+  signed_get directly against our directory Worker
   (https://wbauth.silov801.workers.dev/agents). Prints a result dict
   with `signature_input_present: True` — the verification anchor that
   proves a signed Signature-Input header was emitted to stdout.
 
 Run:
-    uv pip install "openai-agents" "httpx>=0.28,<1"
+    uv pip install "openai-agents" "httpx>=0.28,<1" "openai>=1.50"
 
     # Mock mode (no key required, no openai-agents needed):
     python examples/openai_agents_demo.py
 
-    # Real mode (LLM key drives the Agent):
+    # Real mode via OpenRouter (recommended — one key, all models):
+    OPENROUTER_API_KEY=sk-or-... python examples/openai_agents_demo.py
+    # Optional: pick a model
+    OPENROUTER_API_KEY=sk-or-... WBAUTH_MODEL=anthropic/claude-3.5-sonnet \\
+      python examples/openai_agents_demo.py
+
+    # Real mode via direct OpenAI (legacy):
     OPENAI_API_KEY=sk-... python examples/openai_agents_demo.py
 
 Pitfalls:
 - Tool returns a string summary, not raw HTTP. Agents SDK tools must
   return JSON-serializable types; string is the safest.
 - Mock-mode bypasses Runner.run entirely — directly invokes signed_get.
-  This means `agents` (openai-agents pip package) is only imported in
-  real_mode, so mock-mode runs even without that dep installed.
+  This means `agents` and `openai` are only imported in real_mode, so
+  mock-mode runs even without those deps installed.
+- OpenRouter requires the OpenRouter-style model name with a provider
+  prefix (e.g., `openai/gpt-4o`, not bare `gpt-4o`). Direct-OpenAI mode
+  uses the un-prefixed name.
 
 Per CONTEXT D-70: this demo does NOT depend on Cloudflare verifier
 round-trip. The verification anchor is `signature_input_present: True`
@@ -88,9 +100,29 @@ def signed_get(url: str, identity: Identity) -> dict:
 
 
 async def real_mode(identity: Identity) -> None:
-    """Run a real OpenAI Agent with a signed-fetch tool. Requires
-    OPENAI_API_KEY and the `openai-agents` pip package."""
-    from agents import Agent, Runner, function_tool
+    """Run a real Agent with a signed-fetch tool. Routes through OpenRouter
+    if OPENROUTER_API_KEY is set; otherwise uses direct OpenAI. Requires the
+    `openai-agents` and `openai` pip packages."""
+    from agents import Agent, Runner, function_tool, set_default_openai_client
+    from openai import AsyncOpenAI
+
+    if openrouter_key := os.getenv("OPENROUTER_API_KEY"):
+        # OpenRouter is OpenAI-API-compatible — same SDK, different base_url.
+        # One key unlocks all models (openai/, anthropic/, meta-llama/, etc.).
+        client = AsyncOpenAI(
+            api_key=openrouter_key,
+            base_url="https://openrouter.ai/api/v1",
+        )
+        set_default_openai_client(client)
+        # OpenRouter requires provider-prefixed model names.
+        model = os.getenv("WBAUTH_MODEL", "openai/gpt-4o-mini")
+        provider = "OpenRouter"
+    else:
+        # Direct OpenAI fallback — no client override needed; the SDK's
+        # default client picks up OPENAI_API_KEY automatically.
+        model = os.getenv("WBAUTH_MODEL", "gpt-4o-mini")
+        provider = "OpenAI"
+    print(f"[demo] LLM provider: {provider} (model={model})")
 
     @function_tool
     def fetch_page(url: str) -> str:
@@ -103,6 +135,7 @@ async def real_mode(identity: Identity) -> None:
 
     agent = Agent(
         name="WebBotAuthDemo",
+        model=model,
         instructions=(
             "You demonstrate Web Bot Auth signed requests. When asked to "
             "fetch a URL, use the fetch_page tool. Always report the HTTP status."
@@ -127,11 +160,11 @@ def mock_mode(identity: Identity) -> None:
 
 def main() -> None:
     identity = make_identity()
-    if os.getenv("OPENAI_API_KEY"):
-        print("[demo] Real mode (OpenAI key detected)")
+    if os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY"):
+        print("[demo] Real mode (LLM key detected)")
         asyncio.run(real_mode(identity))
     else:
-        print("[demo] Mock mode (no OpenAI key)")
+        print("[demo] Mock mode (no LLM key — set OPENROUTER_API_KEY for Agent run)")
         mock_mode(identity)
 
 

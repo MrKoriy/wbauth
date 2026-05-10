@@ -13,6 +13,34 @@ detected.
 > `Signature-Input` headers leave the client). Phase 1's daily canary
 > handles the full Cloudflare e2e verification path.
 
+## LLM provider — OpenRouter recommended
+
+All three real-mode demos accept either an OpenRouter or a direct
+OpenAI key. We recommend OpenRouter:
+
+- **One key, all models**: pick any of `openai/gpt-4o-mini` (default,
+  cheap), `anthropic/claude-3.5-sonnet`, `meta-llama/llama-3.1-70b-instruct`,
+  etc. — no per-provider key management.
+- **Pay-as-you-go pricing** without a separate billing relationship per
+  provider.
+- **Same OpenAI-compatible API** — the demos just point the OpenAI
+  client at `https://openrouter.ai/api/v1`.
+
+Get a key at https://openrouter.ai/keys, then:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+# Optional: override the default model (openai/gpt-4o-mini)
+export WBAUTH_MODEL=anthropic/claude-3.5-sonnet
+```
+
+Direct `OPENAI_API_KEY` still works as a fallback for users with
+existing OpenAI accounts. Browser Use additionally accepts
+`BROWSER_USE_API_KEY` for its hosted backend.
+
+Priority order in all demos: `OPENROUTER_API_KEY` → `OPENAI_API_KEY` →
+`BROWSER_USE_API_KEY` (Browser Use only) → mock-mode.
+
 ---
 
 ## browser_use_demo.py — Browser Use × wbauth (DIST-04)
@@ -31,9 +59,13 @@ playwright install chromium
 # Mock mode (no LLM key — opens our Worker directly, prints signed request):
 python examples/browser_use_demo.py
 
-# Real mode (LLM key — runs a Browser Use Agent navigating example.com):
+# Real mode via OpenRouter (recommended):
+OPENROUTER_API_KEY=sk-or-... python examples/browser_use_demo.py
+
+# Real mode via direct OpenAI:
 OPENAI_API_KEY=sk-... python examples/browser_use_demo.py
-# OR
+
+# Real mode via Browser Use hosted backend:
 BROWSER_USE_API_KEY=... python examples/browser_use_demo.py
 ```
 
@@ -63,7 +95,10 @@ npx playwright install chromium  # Stagehand LOCAL still needs the Chromium bina
 # Mock mode (no LLM key — opens our Worker, prints signed request):
 npx tsx examples/stagehand_demo.ts
 
-# Real mode (LLM key — runs stagehand.observe on example.com):
+# Real mode via OpenRouter (recommended):
+OPENROUTER_API_KEY=sk-or-... npx tsx examples/stagehand_demo.ts
+
+# Real mode via direct OpenAI:
 OPENAI_API_KEY=sk-... npx tsx examples/stagehand_demo.ts
 ```
 
@@ -89,7 +124,7 @@ signed HTTP requests.
 
 **Install:**
 ```bash
-uv pip install "openai-agents" "httpx>=0.28,<1"
+uv pip install "openai-agents" "openai>=1.50" "httpx>=0.28,<1"
 ```
 
 **Run:**
@@ -97,14 +132,17 @@ uv pip install "openai-agents" "httpx>=0.28,<1"
 # Mock mode (no LLM key — calls signed_get directly, prints result + signature presence):
 python examples/openai_agents_demo.py
 
-# Real mode (LLM key — runs Runner with a real Agent that calls the tool):
+# Real mode via OpenRouter (recommended — set_default_openai_client points the SDK at OpenRouter):
+OPENROUTER_API_KEY=sk-or-... python examples/openai_agents_demo.py
+
+# Real mode via direct OpenAI:
 OPENAI_API_KEY=sk-... python examples/openai_agents_demo.py
 ```
 
-**Note:** The Agent's *own* OpenAI API calls are NOT signed by wbauth
-(we don't sign requests TO openai.com). Only the **tool's** outbound
-HTTP requests via `httpx.Client(auth=WebBotAuth(identity))` are
-signed. This is the right model — the Agent gets identity for the
+**Note:** The Agent's *own* LLM API calls are NOT signed by wbauth
+(we don't sign requests TO the LLM provider). Only the **tool's**
+outbound HTTP requests via `httpx.Client(auth=WebBotAuth(identity))`
+are signed. This is the right model — the Agent gets identity for the
 sites it visits, not for its own LLM calls.
 
 **Note:** Mock-mode does NOT import `agents` (the openai-agents pip
@@ -116,7 +154,8 @@ package), so you can run the mock-mode smoke without installing it.
 
 Each demo follows the same pattern (per CONTEXT D-67):
 
-1. **Detect LLM key** in env (`OPENAI_API_KEY` etc.)
+1. **Detect LLM key** in env (`OPENROUTER_API_KEY` preferred,
+   `OPENAI_API_KEY` fallback, `BROWSER_USE_API_KEY` for Browser Use)
 2. **Real mode**: full Agent loop on a benign target
    (`https://example.com`)
 3. **Mock mode**: skip the Agent, run the SDK's signing path directly
