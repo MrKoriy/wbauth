@@ -30,14 +30,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Pre-flight Policy Inspector
 
-- [ ] **POLICY-01**: SDK exposes async `inspect(url) -> SitePolicy` that fans out parallel fetches to robots.txt, ai.txt, llms.txt, .well-known/http-message-signatures-directory, and returns one unified frozen dataclass
-- [ ] **POLICY-02**: Per-endpoint timeout 3s; partial failures isolated (`return_exceptions=True`); `SitePolicy` exposes `partial: bool` and `errors: dict[str, Exception]`
-- [ ] **POLICY-03**: robots.txt parsed via `protego` (RFC 9309 compliant); HTML 200 responses on `/robots.txt` raise explicit parse error rather than silently returning "allowed"
-- [ ] **POLICY-04**: ai.txt v1.1.1 parser returns structured object with `[identity]`, `[permissions]`, `[restrictions]`, `[attribution]`, `[contact]`, `[content-types]` sections
-- [ ] **POLICY-05**: llms.txt parser returns structured object; labeled with `enforcement: "voluntary"` so it is not sold as access control
-- [ ] **POLICY-06**: SDK exposes `policy.verdict` returning `"allowed" | "restricted" | "forbidden"` with `reasons: list[str]` derived from rule engine (robots authoritative; ai.txt restriction → restricted; signing-required → restricted with mitigation hint)
-- [ ] **POLICY-07**: Per-host LRU cache respects origin `Cache-Control`/`ETag` (defaults: robots.txt 24h, ai.txt 1h, llms.txt 24h); cache is in-process, no external dependency
-- [ ] **POLICY-08**: `inspect(url)` works without any hosted directory or external service of ours; SDK has zero hard cloud dependencies
+- [x] **POLICY-01**: SDK exposes async `inspect(url) -> SitePolicy` that fans out parallel fetches to robots.txt, ai.txt, llms.txt, .well-known/http-message-signatures-directory, and returns one unified frozen dataclass
+- [x] **POLICY-02**: Per-endpoint timeout 3s; partial failures isolated (`return_exceptions=True`); `SitePolicy` exposes `partial: bool` and `errors: dict[str, Exception]`
+- [x] **POLICY-03**: robots.txt parsed via `protego` (RFC 9309 compliant); HTML 200 responses on `/robots.txt` raise explicit parse error rather than silently returning "allowed"
+- [x] **POLICY-04**: ai.txt v1.1.1 parser returns structured object with `[identity]`, `[permissions]`, `[restrictions]`, `[attribution]`, `[contact]`, `[content-types]` sections
+- [x] **POLICY-05**: llms.txt parser returns structured object; labeled with `enforcement: "voluntary"` so it is not sold as access control
+- [x] **POLICY-06**: SDK exposes `policy.verdict` returning `"allowed" | "restricted" | "forbidden"` with `reasons: list[str]` derived from rule engine (robots authoritative; ai.txt restriction → restricted; signing-required → restricted with mitigation hint)
+- [x] **POLICY-07**: Per-host LRU cache respects origin `Cache-Control`/`ETag` (defaults: robots.txt 24h, ai.txt 1h, llms.txt 24h); cache is in-process, no external dependency
+- [x] **POLICY-08**: `inspect(url)` works without any hosted directory or external service of ours; SDK has zero hard cloud dependencies
 
 ### Hosted Directory (agentpassport.dev)
 

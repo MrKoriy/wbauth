@@ -13,9 +13,9 @@ Five phases ship a Python+TypeScript OSS toolkit that gives AI agents two superp
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & Cryptographic Root** - Day-1 hosting test, monorepo scaffold, test vectors, Python signer passing Cloudflare debug verifier
-- [ ] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, wbauth CLI core
+- [x] **Phase 2: Python Adapters & Policy Inspector** - httpx/requests/Playwright adapters, full inspect(url) with verdict engine, wbauth CLI core
 - [x] **Phase 3: Hosted Directory & Cloudflare Submission** - Cloudflare Workers + D1 directory at `wbauth.silov801.workers.dev`, end-to-end registration→sign→verify (DIST-08 moved to Phase 5 — Cloudflare submission requires public GitHub repo which depends on D-08 GitHub-org choice). E2E exit criterion D-52 SATISFIED (PARTIAL — internal chain proved; external Cloudflare verifier validation deferred to Phase 5 DIST-08).
-- [ ] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos (DIST-07 upstream PRs moved to Phase 5 per 04-CONTEXT.md D-71)
+- [x] **Phase 4: TypeScript SDK & Framework Integrations** - TS fetch+Playwright adapters with byte-equality to Python, Browser Use/Stagehand/OpenAI Agents demos (DIST-07 upstream PRs moved to Phase 5 per 04-CONTEXT.md D-71)
 - [ ] **Phase 5: Pre-Army Hardening, Docs & Launch** - Astro Starlight docs site, Loom demo, README polish, Dependabot, daily canary, frozen branch, MAINTAINER_AWAY runbook, 2FA backups, public launch + Cloudflare verified-bot submission (DIST-08) + upstream framework PRs (DIST-07)
 
 ## Phase Details
