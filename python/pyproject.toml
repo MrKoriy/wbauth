@@ -1,5 +1,5 @@
 [project]
-name = "wbauth"
+name = "wbauth-sdk"
 version = "0.2.0"
 description = "Web Bot Auth (RFC 9421) Python SDK — agent identity for the agentic web"
 readme = "README.md"
