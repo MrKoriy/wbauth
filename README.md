@@ -13,7 +13,7 @@ An open-source toolkit that implements IETF **Web Bot Auth**. It signs your requ
 [![Tests](https://img.shields.io/github/actions/workflow/status/MrKoriy/wbauth/ci.yml?branch=main&style=flat-square&label=tests&color=111111)](https://github.com/MrKoriy/wbauth/actions/workflows/ci.yml)
 
 ```
-pip install wbauth          npm install wbauth
+pip install wbauth          npm install wb-auth
 ```
 
 ---
