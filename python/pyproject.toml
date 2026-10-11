@@ -1,6 +1,6 @@
 [project]
 name = "wbauth"
-version = "0.1.0"
+version = "0.2.0"
 description = "Web Bot Auth (RFC 9421) Python SDK — agent identity for the agentic web"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -11,13 +11,18 @@ dependencies = [
     "cryptography>=47,<48",
     "http-message-signatures>=2.0.1,<3",
     "httpx>=0.28,<0.30",
-    "playwright>=1.59,<2",
     "protego>=0.6,<1",
     "requests>=2.32,<3",
 ]
 
 [project.optional-dependencies]
+playwright = ["playwright>=1.59,<2"]
+http2 = ["httpx[http2]>=0.28,<0.30"]
 windows = ["oschmod>=0.3"]
+
+[project.urls]
+Homepage = "https://github.com/MrKoriy/wbauth"
+Issues = "https://github.com/MrKoriy/wbauth/issues"
 
 [project.scripts]
 wbauth = "wbauth.cli:main"
@@ -33,8 +38,8 @@ packages = ["src/wbauth"]
 dev = [
     "pytest>=8",
     "anyio>=4",
-    "ruff>=0.6",
-    "pyright>=1.1",
+    "ruff==0.15.12",
+    "pyright==1.1.409",
     "pytest-httpx",
     "responses",
 ]

@@ -7,8 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-extras --dev --all-packages
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.0"
+      - run: uv sync --locked --all-extras --dev --all-packages
       - name: Run vector tests (Python)
         run: uv run pytest python/tests/test_vectors.py -v
   typescript-vectors:
@@ -21,14 +23,16 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Run vector tests (TypeScript)
-        run: npm run test --workspace=wbauth
+        run: npm run test --workspace=wb-auth
   cloudflare-debug:
     needs: [python-vectors]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-packages
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.0"
+      - run: uv sync --locked --all-packages
       - name: Cloudflare research-verifier smoke test
         run: uv run python -m wbauth._smoke.cloudflare_debug
         # Same script the dedicated cloudflare-debug.yml workflow runs daily.

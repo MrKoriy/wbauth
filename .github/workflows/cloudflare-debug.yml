@@ -31,8 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - run: uv sync --all-packages
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.0"
+      - run: uv sync --locked --all-packages
       - name: Sign + send to Cloudflare research verifier
         run: uv run python -m wbauth._smoke.cloudflare_debug
         # Exits non-zero on:

@@ -115,6 +115,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Emit the full SitePolicy as JSON to stdout (machine-readable).",
     )
+    insp.add_argument(
+        "--user-agent",
+        default=None,
+        help="Evaluate robots.txt for this User-Agent (default: wbauth/0.1).",
+    )
 
     # ---- verify (Phase 2, CLI-03) ------------------------------------------
     ver = sub.add_parser(
@@ -258,10 +263,21 @@ def _print_human_summary(policy: SitePolicy) -> None:
     # Lowercase boolean to read more like JSON / shell flags than Python's
     # capitalized "True" / "False".
     print(f"Partial: {str(policy.partial).lower()}")
-    if policy.errors:
+    absent: list[str] = []
+    real: dict[str, Exception] = {}
+    for name, exc in policy.errors.items():
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if isinstance(status, int) and 400 <= status < 500 and status != 429:
+            absent.append(f"{name} ({status})")
+        else:
+            real[name] = exc
+    if absent:
+        print(f"Not published: {', '.join(absent)}")
+    if real:
         print("Errors:")
-        for name, exc in policy.errors.items():
-            print(f"  - {name}: {type(exc).__name__}: {exc}")
+        for name, exc in real.items():
+            first_line = str(exc).splitlines()[0] if str(exc) else ""
+            print(f"  - {name}: {type(exc).__name__}: {first_line}")
     else:
         print("Errors:  none")
     print(f"Fetched: {policy.fetched_at.isoformat()}")
@@ -279,7 +295,9 @@ def _dispatch_inspect(args: argparse.Namespace) -> int:
     consumers always see a clean parseable document or an empty stdout).
     """
     try:
-        policy: SitePolicy = asyncio.run(inspect(args.url))
+        policy: SitePolicy = asyncio.run(
+            inspect(args.url, user_agent=args.user_agent)
+        )
     except ValueError as e:
         # URL parse errors from inspect() itself (e.g., httpx URL parsing).
         print(f"error: invalid URL: {e}", file=sys.stderr)

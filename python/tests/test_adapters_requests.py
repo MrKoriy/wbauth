@@ -38,8 +38,10 @@ def test_consecutive_requests_have_different_nonces():
     requests.get("https://example.com/a", auth=adapter)
     requests.get("https://example.com/b", auth=adapter)
     nonce_pat = re.compile(r'nonce="([^"]+)"')
-    n1 = nonce_pat.search(responses.calls[0].request.headers["Signature-Input"]).group(1)
-    n2 = nonce_pat.search(responses.calls[1].request.headers["Signature-Input"]).group(1)
+    inputs = [str(c.request.headers["Signature-Input"]) for c in responses.calls]
+    m1, m2 = (nonce_pat.search(v) for v in inputs)
+    assert m1 and m2
+    n1, n2 = m1.group(1), m2.group(1)
     assert n1 != n2, "consecutive requests must use distinct nonces (no caching)"
 
 

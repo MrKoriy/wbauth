@@ -168,7 +168,9 @@ class Identity:
         return cls(pair, signature_agent_url, user_agent=user_agent)
 
     @classmethod
-    def from_test_key(cls, signature_agent_url: str) -> "Identity":
+    def from_test_key(
+        cls, signature_agent_url: str, *, user_agent: Optional[str] = None
+    ) -> "Identity":
         """Construct from the RFC 9421 Appendix B.1.4 publicly-known test key.
 
         For tests + Cloudflare debug smoke checks. NEVER use in production —
@@ -180,7 +182,11 @@ class Identity:
         padded = _TEST_KEY_D + "=" * (-len(_TEST_KEY_D) % 4)
         d = base64.urlsafe_b64decode(padded)
         key = Ed25519PrivateKey.from_private_bytes(d)
-        return cls(KeyPair(key, _compute_kid(key.public_key())), signature_agent_url)
+        return cls(
+            KeyPair(key, _compute_kid(key.public_key())),
+            signature_agent_url,
+            user_agent=user_agent,
+        )
 
     # ---------- Redaction guarantees (IDENT-08) ----------
 

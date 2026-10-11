@@ -27,14 +27,21 @@ def test_top_level_reexports():
 def test_phase2_runtime_deps_importable():
     """Phase-2 runtime deps install cleanly via uv sync."""
     import cachetools
-    import playwright
     import protego
     import requests
     # Versions must be in the pinned ranges:
     assert int(requests.__version__.split(".")[0]) == 2
     assert int(cachetools.__version__.split(".")[0]) >= 4  # min any cachetools 4+
     assert protego is not None
-    assert playwright is not None
+
+
+def test_playwright_is_optional_extra():
+    """Playwright moved to the ``wbauth[playwright]`` extra (not a hard dep)."""
+    import importlib.metadata as md
+
+    reqs = md.requires("wbauth") or []
+    hard = [r for r in reqs if "extra ==" not in r]
+    assert not any(r.lower().startswith("playwright") for r in hard)
 
 
 def test_phase2_dev_deps_importable():

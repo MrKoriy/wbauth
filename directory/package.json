@@ -8,7 +8,8 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "migrate:local": "wrangler d1 migrations apply wbauth-directory --local",
-    "migrate:remote": "wrangler d1 migrations apply wbauth-directory --remote"
+    "migrate:remote": "wrangler d1 migrations apply wbauth-directory --remote",
+    "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
     "hono": "^4.12.16",

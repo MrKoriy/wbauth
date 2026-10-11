@@ -2,207 +2,166 @@
 
 **Verifiable identity and pre-flight policy checks for AI agents and web crawlers.**
 
-An open-source toolkit that implements IETF **Web Bot Auth**. It signs your requests with Ed25519 [HTTP Message Signatures (RFC 9421)](https://www.rfc-editor.org/rfc/rfc9421) and reads a site's published rules before your agent makes a request.
+An open-source toolkit for IETF **Web Bot Auth**. It signs your requests with Ed25519 [HTTP Message Signatures (RFC 9421)](https://www.rfc-editor.org/rfc/rfc9421) and reads a site's published rules before your agent makes a request.
 
-[![PyPI](https://img.shields.io/pypi/v/wbauth?style=flat-square&color=111111&label=pypi)](https://pypi.org/project/wbauth/)
-[![npm](https://img.shields.io/npm/v/wbauth?style=flat-square&color=111111&label=npm)](https://www.npmjs.com/package/wbauth)
+[![npm](https://img.shields.io/npm/v/wb-auth?style=flat-square&color=111111&label=npm)](https://www.npmjs.com/package/wb-auth)
 [![License](https://img.shields.io/badge/license-Apache%202.0-111111?style=flat-square)](LICENSE)
 [![RFC 9421](https://img.shields.io/badge/RFC-9421-111111?style=flat-square)](https://www.rfc-editor.org/rfc/rfc9421)
-[![Python](https://img.shields.io/badge/python-3.10%2B-111111?style=flat-square)](https://www.python.org/)
-[![TypeScript](https://img.shields.io/badge/typescript-5%2B-111111?style=flat-square)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/github/actions/workflow/status/MrKoriy/wbauth/ci.yml?branch=main&style=flat-square&label=tests&color=111111)](https://github.com/MrKoriy/wbauth/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-111111?style=flat-square)](https://www.python.org/)
+[![Node](https://img.shields.io/badge/node-20%2B-111111?style=flat-square)](https://nodejs.org/)
+[![Python CI](https://img.shields.io/github/actions/workflow/status/MrKoriy/wbauth/python.yml?branch=main&style=flat-square&label=python&color=111111)](https://github.com/MrKoriy/wbauth/actions/workflows/python.yml)
+[![TypeScript CI](https://img.shields.io/github/actions/workflow/status/MrKoriy/wbauth/typescript.yml?branch=main&style=flat-square&label=typescript&color=111111)](https://github.com/MrKoriy/wbauth/actions/workflows/typescript.yml)
 
+```bash
+npm install wb-auth                                              # TypeScript / JavaScript (ESM + CommonJS)
+pip install "wbauth @ git+https://github.com/MrKoriy/wbauth#subdirectory=python"   # Python (PyPI release pending)
 ```
-pip install wbauth          npm install wb-auth
-```
+
+> The npm package is **`wb-auth`**. The Python distribution and CLI are called `wbauth`.
 
 ---
 
 ## Contents
 
 - [Why wbauth exists](#why-wbauth-exists)
-- [30-second quickstart](#30-second-quickstart)
+- [Quickstart](#quickstart)
 - [Signed identity](#signed-identity)
 - [Pre-flight policy engine](#pre-flight-policy-engine)
 - [Framework integrations](#framework-integrations)
 - [CLI](#cli)
 - [JWKS directory on Cloudflare Workers](#jwks-directory-on-cloudflare-workers)
-- [Architecture](#architecture)
-- [Standards and compliance](#standards-and-compliance)
+- [Standards](#standards)
 - [Security model](#security-model)
 - [Repository layout](#repository-layout)
-- [Contributing](#contributing)
-- [License](#license)
+- [Development](#development)
 
 ---
 
 ## Why wbauth exists
 
-Most automated traffic on the web looks the same to a site: an IP address and a `User-Agent` string. Anyone can fake either one. Sites defend themselves with rate limits, bot scores, challenges such as Cloudflare Turnstile, and outright blocks. Legitimate agents get caught by the same rules as abusive scrapers because the site has no way to tell them apart.
+To a site, most automated traffic is just an IP address and a `User-Agent` string, and both are trivial to fake. Legitimate agents get caught by the same rate limits, challenges and blocks as abusive scrapers.
 
-The fix is **cryptographic identity, not better disguise.**
+Web Bot Auth gives an agent a key pair. The agent publishes its public key in a JWKS directory and signs every request with RFC 9421. The origin (or a CDN such as Cloudflare) fetches the key, checks the signature and knows who it is talking to.
 
-Web Bot Auth gives an agent a key pair. The agent publishes its public key in a JWKS directory at a stable URL and signs every request with RFC 9421 HTTP Message Signatures. The origin, or a CDN acting for it, fetches the key, checks the signature, and decides what to do with a known party.
+A well-behaved agent should also know what a site allows **before** sending a request. wbauth covers both halves:
 
-Identity is only half the problem. A well-behaved agent should also know what a site allows **before** it sends a request. That information is spread across `robots.txt`, `ai.txt`, `llms.txt` and several `.well-known` endpoints, each with its own format and failure rules.
+| Capability | Result |
+|---|---|
+| **Signed identity** | Ed25519 RFC 9421 signatures with `tag="web-bot-auth"`, RFC 7638 key IDs, JWKS publishing, Cloudflare-compatible request format |
+| **Pre-flight policy** | Parallel fetch of `robots.txt`, `ai.txt`, `llms.txt` and the signing directory, reduced to one deterministic verdict: `allowed`, `restricted` or `forbidden` |
 
-wbauth covers both halves in one import:
-
-| | Capability | Result |
-|---|---|---|
-| **1** | **Signed identity** | Ed25519 RFC 9421 signatures, JWKS publishing and verification, and a request format compatible with Cloudflare Verified Bots |
-| **2** | **Pre-flight policy engine** | Parallel inspection of `robots.txt`, `ai.txt`, `llms.txt` and `.well-known`, producing one deterministic verdict: `allowed`, `restricted` or `forbidden` |
-
-> wbauth does not bypass bot protection, solve challenges or rotate fingerprints. It makes your agent identifiable and helps it follow site rules. Whether a signed agent gets access is still up to the site.
+> wbauth does not bypass bot protection, solve challenges or rotate fingerprints. It makes your agent identifiable and helps it follow site rules.
 
 ---
 
-## 30-second quickstart
+## Quickstart
 
 ### Python
 
-**Sign requests**
-
 ```python
 import httpx
-from wbauth import Identity
+from wbauth import Identity, WebBotAuth, inspect
 
-identity = Identity.load("wbauth.key", agent="https://agent.example.com")
-client = httpx.Client(auth=identity.httpx_auth())
-client.get("https://example.com/articles/42")
-```
+identity = Identity.load_or_generate(
+    "~/.config/wbauth/key.pem",
+    signature_agent_url="https://agent.example.com/.well-known/http-message-signatures-directory",
+    user_agent="ExampleAgent/1.0 (+https://agent.example.com)",
+)
 
-**Inspect policy**
-
-```python
-from wbauth import inspect
-
-report = await inspect("https://example.com/articles/42")
-print(report.verdict)   # allowed | restricted | forbidden
+policy = await inspect("https://example.com/articles/42", user_agent=identity.user_agent)
+if policy.verdict != "forbidden":
+    with httpx.Client(auth=WebBotAuth(identity)) as client:
+        client.get("https://example.com/articles/42")
 ```
 
 ### TypeScript
 
-**Sign requests**
-
 ```ts
-import { Identity, signedFetch } from "wbauth";
+import { Identity, createSignedFetch } from "wb-auth";
 
-const identity = await Identity.load("wbauth.key", { agent: "https://agent.example.com" });
-const fetch = signedFetch(identity);
-await fetch("https://example.com/articles/42");
+const identity = await Identity.loadOrGenerate("./wbauth.pem", {
+  signatureAgentUrl: "https://agent.example.com/.well-known/http-message-signatures-directory",
+  userAgent: "ExampleAgent/1.0 (+https://agent.example.com)",
+});
+
+const signedFetch = createSignedFetch(identity);
+await signedFetch("https://example.com/articles/42");
 ```
 
-**Inspect policy**
+CommonJS works too: `const { Identity, createSignedFetch } = require("wb-auth");`
 
-```ts
-import { inspect } from "wbauth";
-
-const report = await inspect("https://example.com/articles/42");
-console.log(report.verdict); // "allowed" | "restricted" | "forbidden"
-```
-
-**Generate a key once**
+### Generate a key once
 
 ```bash
-wbauth keygen --out wbauth.key
-# → wbauth.key        private key (Ed25519, keep secret)
-# → jwks.json         public JWKS, ready to publish
-# → keyid             poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U  (RFC 7638 thumbprint)
+wbauth keygen --output wbauth.pem --jwks-output jwks.json
+# prints the keyid (RFC 7638 thumbprint); the key file is written with mode 0600
 ```
 
 ---
 
 ## Signed identity
 
-Every outgoing request gets three headers:
+Each signed request carries three headers:
 
 ```http
-GET /articles/42 HTTP/1.1
-Host: example.com
-Signature-Agent: "https://agent.example.com"
-Signature-Input: sig1=("@authority" "signature-agent");\
-  created=1767225600;expires=1767225900;\
-  keyid="poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U";\
-  alg="ed25519";nonce="e8N7S2MFd/qrd6T2R3tdfAuuANngKI7LFtKdI/Vldjg=";\
-  tag="web-bot-auth"
-Signature: sig1=:jdq0SqOwHdyHr9+r5jw3iYZH6aNGKijYp/EstF4RQTQdi5N5YYKrD+mCT1HA1nZDsi6nJKuHxUi/5Syp3rLWBA==:
+Signature-Agent: "https://agent.example.com/.well-known/http-message-signatures-directory"
+Signature-Input: sig1=("@authority" "signature-agent");created=1735689600;expires=1735689660;keyid="poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U";alg="ed25519";nonce="...";tag="web-bot-auth"
+Signature: sig1=:...:
 ```
 
-| Header | Purpose |
+| Parameter | Default |
 |---|---|
-| `Signature-Agent` | URL of the agent's key directory, where verifiers resolve the public key |
-| `Signature-Input` | Covered components and parameters: `created`, `expires`, `keyid`, `alg`, `nonce`, `tag="web-bot-auth"` |
-| `Signature` | Ed25519 signature over the RFC 9421 signature base |
+| Algorithm | Ed25519 |
+| `keyid` | RFC 7638 JWK thumbprint (SHA-256, base64url) |
+| Covered components | `@authority`, `signature-agent`; plus `content-digest` when there is a body |
+| Lifetime | 60 seconds (`expires` must be > 0; configurable) |
+| Nonce | Random per request |
 
-**Defaults**
+Behaviour shared by both SDKs:
 
-- **Algorithm:** `ed25519` only. No algorithm negotiation and no RSA fallback.
-- **`keyid`:** the RFC 7638 JWK thumbprint (SHA-256, base64url) of the public key.
-- **Covered components:** `@authority` and `signature-agent`. More can be added with `components=[...]`.
-- **Lifetime:** 300 seconds, plus a fresh 32-byte nonce on every request.
-- **Directory:** served at `/.well-known/http-message-signatures-directory` with content type `application/http-message-signatures-directory+json`.
+- Bodies on `POST`/`PUT`/`PATCH` get a `Content-Digest` (RFC 9530) that is covered by the signature; streaming bodies are buffered first.
+- Stale `Signature`, `Signature-Input` and `Signature-Agent` headers are removed before re-signing.
+- The identity's `User-Agent` replaces library defaults (`python-requests/*`, `python-httpx/*`, `node`, `undici`) but never overrides one you set explicitly.
+- Python's `signed_session()` re-signs every redirect hop for the new authority. In TS, pass `redirect: "manual"` to `createSignedFetch` if you need to re-sign cross-host redirects yourself.
 
-**Verification**
-
-```python
-from wbauth import verify
-
-result = await verify(request)        # fetches and caches the JWKS behind Signature-Agent
-result.valid, result.keyid, result.agent
-```
-
-```ts
-import { verify } from "wbauth";
-
-const result = await verify(request); // Request from fetch / Workers / Node
-```
-
-**Cross-language parity.** The Python and TypeScript SDKs build the same signature base and produce byte-identical signatures for the same key, nonce, timestamp and request. CI enforces this against a shared fixture set in `tests/vectors/`.
-
-**Cloudflare Verified Bots.** The header layout follows the format Cloudflare documents for Web Bot Auth. To have your agent recognized as verified, you still need to register its key directory through Cloudflare's bot verification process. Signing alone does not grant verified status.
+Shared cross-language vectors live in [`spec/test-vectors/`](spec/test-vectors/); both SDKs must produce byte-identical signature bases.
 
 ---
 
 ## Pre-flight policy engine
 
-`inspect(url)` fetches every policy source in parallel, parses each with a standard-conformant parser and reduces the results to a single verdict.
+`inspect(url)` fetches each policy source in parallel (3 s timeout per endpoint, at most 5 redirects, robots.txt truncated at 500 KiB, other bodies capped at 1 MB) and reduces the results to one verdict.
 
-| Source | Location | Parser |
+| Source | Location | Effect |
 |---|---|---|
-| robots.txt | `/robots.txt` | RFC 9309 via [protego](https://github.com/scrapy/protego) |
-| ai.txt | `/ai.txt` | ai.txt v1.1.1 |
-| llms.txt | `/llms.txt` | llms.txt (informational, plus content hints) |
-| .well-known | `/.well-known/*` | Known AI and agent policy endpoints |
+| robots.txt | `/robots.txt` | RFC 9309 via [protego], evaluated for your `User-Agent` and path; `Crawl-delay` is reported |
+| ai.txt | `/ai.txt` | Restrictions → `restricted` |
+| llms.txt | `/llms.txt` | Informational; restrictive wording → `restricted` |
+| Signing directory | `/.well-known/http-message-signatures-directory` | Informational (site supports Web Bot Auth) |
 
-### Verdicts
+[protego]: https://github.com/scrapy/protego
 
-The engine is deterministic. The same inputs always produce the same verdict, and every verdict comes with the rule that caused it.
+**Precedence:** `forbidden` > `restricted` > `allowed`. A partial fetch (any endpoint failed) downgrades `allowed` to `restricted`.
 
-| Verdict | Meaning | Typical cause |
-|---|---|---|
-| `allowed` | No source restricts this agent on this path | No matching disallow and no usage restrictions |
-| `restricted` | Access is allowed with conditions | `Crawl-delay`, ai.txt limits on training or reuse, rate hints |
-| `forbidden` | Access is denied | `Disallow` matching the path for this user agent, an explicit ai.txt denial, or an unreachable `robots.txt` (5xx) |
+**robots.txt failures follow RFC 9309:**
 
-**Precedence:** `forbidden` > `restricted` > `allowed`. The most restrictive source wins.
-
-**Failure handling follows RFC 9309:**
-
-| robots.txt status | Treated as |
+| robots.txt result | Treated as |
 |---|---|
-| `2xx` | Parsed |
-| `4xx` | No restrictions (full allow) |
-| `5xx` / network error | Complete disallow (`forbidden`) |
+| `2xx` | Parsed and evaluated |
+| `4xx` (except 429), redirect limit exceeded | Unavailable → no robots restriction |
+| `429`, `5xx`, timeout, network error | Unreachable → complete disallow (`forbidden`) |
+| HTML instead of robots.txt | `forbidden` (strict) |
 
 ```python
-report = await inspect("https://example.com/articles/42", user_agent="ExampleAgent")
+policy = await inspect("https://example.com/articles/42", user_agent="ExampleAgent/1.0")
 
-report.verdict          # "restricted"
-report.reasons          # [Reason(source="robots.txt", rule="Crawl-delay: 10")]
-report.sources          # per-source status, raw body hash, parsed result
-report.crawl_delay      # 10.0
+policy.verdict              # "allowed" | "restricted" | "forbidden"
+policy.reasons              # ["evaluated against User-Agent='ExampleAgent/1.0'", "robots.txt Crawl-delay: 10s", ...]
+policy.robots.crawl_delay   # 10.0
+policy.partial, policy.errors
 ```
+
+Results are cached per host with a TTL that honours `Cache-Control: max-age` (capped at 24 h), including negative results. robots.txt is cached once per host and evaluated per path and user agent. Pass `client=` to reuse your own `httpx.AsyncClient`.
 
 ---
 
@@ -211,234 +170,96 @@ report.crawl_delay      # 10.0
 ### httpx
 
 ```python
-import httpx
-from wbauth import Identity
-
-identity = Identity.load("wbauth.key", agent="https://agent.example.com")
-
-async with httpx.AsyncClient(auth=identity.httpx_auth()) as client:
-    r = await client.get("https://example.com")
+from wbauth import WebBotAuth
+client = httpx.Client(auth=WebBotAuth(identity))          # also works with httpx.AsyncClient
 ```
 
 ### requests
 
 ```python
-import requests
-from wbauth import Identity
-
-session = requests.Session()
-session.mount("https://", Identity.load("wbauth.key", agent="https://agent.example.com").requests_adapter())
-session.get("https://example.com")
+from wbauth import signed_session
+session = signed_session(identity)        # re-signs every redirect hop
+session.get("https://example.com/")
 ```
 
-### Playwright (Python)
+`WebBotAuthAdapter` is available if you manage mounts yourself. Note that `requests` does not re-run `auth=` on redirects, so prefer `signed_session()`.
+
+### Playwright
+
+```bash
+pip install "wbauth[playwright]"
+```
 
 ```python
-from playwright.async_api import async_playwright
-from wbauth import Identity, attach_signing
-
-identity = Identity.load("wbauth.key", agent="https://agent.example.com")
-
-async with async_playwright() as p:
-    browser = await p.chromium.launch()
-    page = await browser.new_page()
-    await attach_signing(page, identity)      # signs every request the page sends
-    await page.goto("https://example.com")
+from wbauth import attach_signing
+await attach_signing(page, identity, hosts=["example.com"])   # sign only these hosts (and subdomains)
 ```
-
-### Playwright (TypeScript)
 
 ```ts
-import { chromium } from "playwright";
-import { Identity, attachSigning } from "wbauth";
-
-const identity = await Identity.load("wbauth.key", { agent: "https://agent.example.com" });
-const page = await (await chromium.launch()).newPage();
-await attachSigning(page, identity);
-await page.goto("https://example.com");
+import { applyTo } from "wb-auth";
+await applyTo(page, identity, { hosts: ["example.com"] });
 ```
 
-### Browser Use
+Both skip non-HTTP(S) requests and accept a custom predicate (`should_sign` / `shouldSign`). Without `hosts`, every HTTP(S) request is signed, including third-party ones.
 
-`examples/browser_use_demo.py` checks policy before the agent acts, then signs every navigation.
+### Examples
 
-```python
-from browser_use import Agent
-from wbauth import Identity, attach_signing, inspect
-
-identity = Identity.load("wbauth.key", agent="https://agent.example.com")
-
-if (await inspect(target)).verdict == "forbidden":
-    raise SystemExit("Site policy forbids this agent.")
-
-agent = Agent(task=f"Summarize {target}", llm=llm)
-await attach_signing(agent.browser_session, identity)
-await agent.run()
-```
-
-### OpenAI Agents SDK
-
-`examples/openai_agents_demo.py` exposes wbauth as a tool, so the model checks policy before it fetches anything.
-
-```python
-from agents import Agent, function_tool
-from wbauth import inspect
-
-@function_tool
-async def check_policy(url: str) -> str:
-    report = await inspect(url)
-    return f"{report.verdict}: {'; '.join(r.rule for r in report.reasons)}"
-
-agent = Agent(name="researcher", tools=[check_policy, signed_fetch_tool])
-```
-
-### Stagehand
-
-`examples/stagehand_demo.ts` signs the underlying Playwright page.
-
-```ts
-import { Stagehand } from "@browserbasehq/stagehand";
-import { Identity, attachSigning } from "wbauth";
-
-const stagehand = new Stagehand({ env: "LOCAL" });
-await stagehand.init();
-await attachSigning(stagehand.page, await Identity.load("wbauth.key", { agent: AGENT_URL }));
-await stagehand.page.goto("https://example.com");
-```
-
-| Integration | Python | TypeScript | Example |
-|---|:-:|:-:|---|
-| httpx | ● | — | — |
-| requests | ● | — | — |
-| fetch | — | ● | — |
-| Playwright | ● | ● | — |
-| Browser Use | ● | — | `examples/browser_use_demo.py` |
-| OpenAI Agents | ● | — | `examples/openai_agents_demo.py` |
-| Stagehand | — | ● | `examples/stagehand_demo.ts` |
+| Example | Stack |
+|---|---|
+| [`examples/browser_use_demo.py`](examples/browser_use_demo.py) | Browser Use + `attach_signing` |
+| [`examples/openai_agents_demo.py`](examples/openai_agents_demo.py) | OpenAI Agents SDK + `WebBotAuth` |
+| [`examples/stagehand_demo.ts`](examples/stagehand_demo.ts) | Stagehand + `wb-auth` |
 
 ---
 
 ## CLI
 
 ```bash
-wbauth keygen  --out wbauth.key
-wbauth inspect https://example.com/articles/42 --user-agent ExampleAgent
-wbauth verify  --request request.http
+wbauth keygen   [--output PATH] [--jwks-output PATH]
+wbauth inspect  URL [--json] [--user-agent UA]      # exit 0 allowed, 1 restricted, 2 forbidden, 3 error
+wbauth verify   [--domain] [--identity PEM] [--json] # check signing against Cloudflare's research verifier
+wbauth register --identity PEM [--directory URL] [--client-name] [--purpose] [--client-uri] [--expected-user-agent]
+wbauth serve    --jwks jwks.json [--port 8080]      # minimal local JWKS host
 ```
 
-```text
-$ wbauth inspect https://example.com/articles/42
-
-  robots.txt     200   Crawl-delay: 10
-  ai.txt         200   training: disallow
-  llms.txt       404   —
-  .well-known    —     none found
-
-  verdict        restricted
-```
-
-Exit codes: `0` allowed, `1` restricted, `2` forbidden, `3` error. These are safe to use as gates in shell scripts and CI.
+`wbauth register` publishes your key to the hosted directory (default `https://wbauth.silov801.workers.dev`).
 
 ---
 
 ## JWKS directory on Cloudflare Workers
 
-`directory/` hosts your public keys as a Cloudflare Worker backed by D1. It fits within the Workers and D1 free tiers, so it adds no billing.
+[`directory/`](directory/) is a Hono Worker backed by D1 that hosts agent keys under `/.well-known/http-message-signatures-directory/{kid}`. Registration is a two-step proof of key ownership:
 
-```bash
-cd directory
-npx wrangler d1 create wbauth-directory
-npx wrangler d1 migrations apply wbauth-directory
-npx wrangler deploy
-wbauth publish jwks.json --directory https://agent.example.com
-```
+1. `POST /register/challenge` returns a 5-minute nonce.
+2. `POST /register/submit` with the Signature Agent Card, signed by the key itself. The signature must cover `content-digest` (matching the raw body) and `signature-agent`; `kid` must equal the RFC 7638 thumbprint of every key.
 
-| Endpoint | Response |
-|---|---|
-| `GET /.well-known/http-message-signatures-directory` | JWKS, `application/http-message-signatures-directory+json`, signed per Web Bot Auth |
-| `POST /keys` | Add a key (authenticated) |
-| `DELETE /keys/:keyid` | Revoke a key (authenticated) |
-
-To rotate a key, publish the new one, overlap both for at least one cache TTL, then revoke the old one.
+Reads are edge-cached for 60 s and purged on re-registration. See [`directory/README.md`](directory/README.md) for endpoints, migrations and deployment.
 
 ---
 
-## Architecture
+## Standards
 
-```text
-                         ┌──────────────────────────────────────────┐
-                         │                 wbauth                   │
-                         │                                          │
-   agent / crawler ────▶ │  1. inspect(url)                         │
-                         │     ├─ robots.txt   (RFC 9309, protego)  │
-                         │     ├─ ai.txt       (v1.1.1)             │
-                         │     ├─ llms.txt                          │
-                         │     └─ .well-known/*                     │
-                         │            │  fan-out, parallel          │
-                         │            ▼                             │
-                         │     verdict: allowed│restricted│forbidden│
-                         │            │                             │
-                         │            ▼  (if not forbidden)         │
-                         │  2. sign(request)                        │
-                         │     Ed25519 · RFC 9421 · tag=web-bot-auth│
-                         └────────────┬─────────────────────────────┘
-                                      │ Signature-Agent
-                                      │ Signature-Input
-                                      │ Signature
-                                      ▼
-                         ┌──────────────────────────┐
-                         │  origin / CDN verifier   │
-                         └────────────┬─────────────┘
-                                      │ GET /.well-known/
-                                      │ http-message-signatures-directory
-                                      ▼
-                         ┌──────────────────────────┐
-                         │  JWKS directory          │
-                         │  Cloudflare Worker + D1  │
-                         └──────────────────────────┘
-```
-
-| Stage | Component | Input | Output |
-|---|---|---|---|
-| Policy | `inspect` | URL, user agent | `Report` (verdict, reasons, sources) |
-| Identity | `Identity` | Ed25519 key, agent URL | Signer bound to `keyid` |
-| Transport | Adapters | Request | Signed request |
-| Discovery | `directory/` | — | Public JWKS |
-| Verification | `verify` | Signed request | `valid`, `keyid`, `agent` |
-
----
-
-## Standards and compliance
-
-| Standard | Scope in wbauth |
+| Standard | Scope |
 |---|---|
-| [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421): HTTP Message Signatures | Signature base, `Signature-Input`, `Signature`, Ed25519 (`alg="ed25519"`) |
-| [RFC 7638](https://www.rfc-editor.org/rfc/rfc7638): JWK Thumbprint | `keyid` derivation, SHA-256, base64url |
-| [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309): Robots Exclusion Protocol | Parsing, matching and status-code semantics via protego |
-| [RFC 8037](https://www.rfc-editor.org/rfc/rfc8037): OKP keys in JOSE | Ed25519 JWK representation (`kty="OKP"`, `crv="Ed25519"`) |
+| [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP Message Signatures | Signature base, `Signature-Input`, `Signature`, `alg="ed25519"` |
+| [RFC 9530](https://www.rfc-editor.org/rfc/rfc9530) Digest Fields | `Content-Digest` for bodies |
+| [RFC 7638](https://www.rfc-editor.org/rfc/rfc7638) JWK Thumbprint | `keyid` derivation |
+| [RFC 8037](https://www.rfc-editor.org/rfc/rfc8037) OKP keys in JOSE | Ed25519 JWK (`kty="OKP"`, `crv="Ed25519"`) |
+| [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309) Robots Exclusion Protocol | Parsing, matching, status-code semantics |
 | [IETF Web Bot Auth](https://datatracker.ietf.org/wg/webbotauth/about/) (draft) | `Signature-Agent`, `tag="web-bot-auth"`, key directory format |
-| ai.txt v1.1.1 | AI usage directives |
-| llms.txt | Content hints for language models |
 
-Web Bot Auth is still an Internet-Draft. wbauth follows the current draft and pins the targeted revision in `SPEC_VERSION`. Changes to the draft come with a minor version bump and a migration note.
+Web Bot Auth is still an Internet-Draft; wire-format changes will ship as a minor version with a note in [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
 ## Security model
 
-**Guarantees**
+- Private keys stay local. Key files are written with mode `0600`, and the SDKs never send or log key material.
+- Signatures are bound to the authority, expire after 60 s by default and carry a random nonce.
+- A valid signature proves *who* sent a request, not *what* it may do. A `forbidden` verdict is a stop signal, not a warning.
+- Non-goals: evading bot detection, solving CAPTCHAs/Turnstile, spoofing browser fingerprints.
 
-- Private keys never leave the process. The SDKs do not send or log key material.
-- Each signature is bound to the authority it was issued for and expires quickly, which limits replay. A per-request nonce lets verifiers reject duplicates.
-- Verification refuses unknown algorithms, expired signatures, missing `tag="web-bot-auth"` and `keyid` mismatches.
-
-**Non-goals**
-
-- Evading bot detection, solving CAPTCHAs or Turnstile, or spoofing browser fingerprints.
-- Overriding a site's policy. A `forbidden` verdict is a stop signal, not a warning.
-- Authorization. A valid signature proves *who* sent a request, not *what* it is allowed to do.
-
-To report a vulnerability, follow [`SECURITY.md`](SECURITY.md). Do not open a public issue.
+To report a vulnerability, see [`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -446,30 +267,31 @@ To report a vulnerability, follow [`SECURITY.md`](SECURITY.md). Do not open a pu
 
 ```text
 wbauth/
-├── python/            Python SDK, CLI, adapters (httpx, requests, Playwright)
-├── typescript/        TypeScript SDK, fetch middleware, Playwright
+├── python/            Python SDK + CLI (httpx, requests, Playwright adapters, policy engine)
+├── typescript/        npm package `wb-auth` (fetch, Playwright)
 ├── directory/         Cloudflare Worker + D1 JWKS directory
-├── examples/
-│   ├── browser_use_demo.py
-│   ├── openai_agents_demo.py
-│   └── stagehand_demo.ts
-├── tests/vectors/     Shared cross-language signature fixtures
-└── SPEC_VERSION       Targeted Web Bot Auth draft revision
+├── examples/          Browser Use, OpenAI Agents, Stagehand demos
+└── spec/test-vectors/ Shared cross-language signature fixtures
 ```
 
 ---
 
-## Contributing
+## Development
 
 ```bash
 git clone https://github.com/MrKoriy/wbauth && cd wbauth
-make test        # Python + TypeScript + cross-language vectors
+
+# Python (uv workspace)
+uv sync --locked
+uv run pytest python/tests && uv run ruff check python && uv run pyright
+
+# TypeScript + Worker (npm workspaces)
+npm ci
+npm run lint && npm run typecheck --workspaces && npm run build && npm test
 ```
 
-Pull requests must keep the shared vectors byte-equal across both SDKs. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
----
+Releases are cut from a `vX.Y.Z` tag; CI checks that the tag matches both package versions before publishing to PyPI and npm (with provenance).
 
 ## License
 
-[Apache 2.0](LICENSE) © Leonid Kutlin ([@MrKoriy](https://github.com/MrKoriy))
+[Apache 2.0](LICENSE)

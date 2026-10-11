@@ -1,45 +1,77 @@
 {
-  "name": "@mrkoriy/wbauth",
-  "version": "0.1.0",
-  "description": "Web Bot Auth (RFC 9421) TypeScript SDK",
-  "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "license": "Apache-2.0",
-  "scripts": {
-    "build": "tsup",
-    "test": "vitest run",
-    "lint": "biome check ."
-  },
-  "dependencies": {
-    "http-message-sig": "^0.2.0",
-    "web-bot-auth": "^0.1.3"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2",
-    "@types/node": "^20",
-    "playwright": "^1.59",
-    "tsup": "^8",
-    "typescript": "^6",
-    "vitest": "^4"
-  },
-  "peerDependencies": {
-    "playwright": "^1"
-  },
-  "peerDependenciesMeta": {
-    "playwright": {
-      "optional": true
-    }
-  }
+	"name": "wb-auth",
+	"version": "0.2.0",
+	"description": "Web Bot Auth (RFC 9421) TypeScript SDK \u2014 signed identity for AI agents and crawlers",
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"require": {
+				"types": "./dist/index.d.cts",
+				"default": "./dist/index.cjs"
+			}
+		},
+		"./package.json": "./package.json"
+	},
+	"files": [
+		"dist"
+	],
+	"sideEffects": false,
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/MrKoriy/wbauth.git",
+		"directory": "typescript"
+	},
+	"homepage": "https://github.com/MrKoriy/wbauth#readme",
+	"bugs": "https://github.com/MrKoriy/wbauth/issues",
+	"keywords": [
+		"web-bot-auth",
+		"rfc9421",
+		"http-message-signatures",
+		"ed25519",
+		"ai-agents",
+		"crawler",
+		"playwright"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"scripts": {
+		"build": "tsup",
+		"test": "vitest run",
+		"lint": "biome check .",
+		"prepublishOnly": "npm run build",
+		"typecheck": "tsc --noEmit -p ."
+	},
+	"dependencies": {
+		"http-message-sig": "^0.2.0",
+		"web-bot-auth": "^0.1.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2",
+		"@types/node": "^20",
+		"playwright": "^1.59",
+		"tsup": "^8",
+		"typescript": "^6",
+		"vitest": "^4"
+	},
+	"peerDependencies": {
+		"playwright": "^1"
+	},
+	"peerDependenciesMeta": {
+		"playwright": {
+			"optional": true
+		}
+	}
 }

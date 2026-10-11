@@ -43,6 +43,8 @@ DEFAULT_EXPIRES_SECONDS = 60
 """Default expires window. 30s is too short given http-message-signatures'
 5s max_clock_skew + network latency. Pitfall 3."""
 
+_RESIGN_HEADERS = frozenset({"signature", "signature-input", "signature-agent"})
+
 DEFAULT_COMPONENTS: tuple[str, ...] = ("@authority", "signature-agent")
 """Cloudflare-safe profile. Do NOT add @query-params or @status. Pitfall 2."""
 
@@ -140,6 +142,17 @@ def sign(
         )
 
     # 2. Set Signature-Agent header (RFC 8941 Structured Field — string in quotes).
+    if not isinstance(expires_after_seconds, (int, float)) or expires_after_seconds <= 0:
+        raise ValueError(
+            f"expires_after_seconds must be a positive number, got: {expires_after_seconds!r}"
+        )
+
+    # Drop stale signature headers in ANY casing. Retried / redirected
+    # requests still carry the previous hop's values; leaving them produces
+    # duplicated headers that every verifier rejects.
+    for k in [k for k in request.headers if k.lower() in _RESIGN_HEADERS]:
+        del request.headers[k]
+
     request.headers["Signature-Agent"] = f'"{identity.signature_agent_url}"'
 
     # 3. Defaults for created/expires/nonce.

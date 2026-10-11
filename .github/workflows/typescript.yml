@@ -1,18 +1,44 @@
 name: TypeScript
 on: [push, pull_request]
 jobs:
-  typescript:
+  sdk:
+    name: SDK (wb-auth)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - name: Lint (biome)
+        run: npm run lint --workspace=wb-auth
+      - name: Type check
+        run: npm run typecheck --workspace=wb-auth
+      - name: Build
+        run: npm run build --workspace=wb-auth
+      - name: Tests
+        run: npm run test --workspace=wb-auth
+      - name: Package smoke test (ESM + CJS)
+        working-directory: typescript
+        run: |
+          node --input-type=module -e 'import { Identity } from "wb-auth"; if (typeof Identity !== "function") process.exit(1)'
+          node -e 'const { Identity } = require("wb-auth"); if (typeof Identity !== "function") process.exit(1)'
+  directory:
+    name: Directory Worker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
-      - name: Lint (biome)
-        run: npm run lint --workspaces --if-present
-      - name: Build
-        run: npm run build --workspace=wbauth
-      - name: Tests
-        run: npm run test --workspace=wbauth --if-present
+      - name: Type check
+        run: npm run typecheck --workspace=wbauth-directory
+      - name: Tests (workerd + D1)
+        run: npm run test --workspace=wbauth-directory

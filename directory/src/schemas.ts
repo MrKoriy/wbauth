@@ -3,37 +3,47 @@
 // V9 ASVS: signature_agent_url is enforced HTTPS.
 import * as z from "zod";
 
+// RFC 7638 SHA-256 thumbprint, base64url without padding = 43 chars.
+const Kid = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{43}$/, "kid must be an RFC 7638 SHA-256 thumbprint");
+// Ed25519 public key, base64url without padding = 43 chars.
+const X = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{43}$/, "x must be a 32-byte base64url Ed25519 key");
+const Short = z.string().max(500);
+
 export const ChallengeBody = z.object({
-  // RFC 7638 base64url SHA-256 thumbprint is ~43 chars; allow [20..80] as
-  // a defensive bound while still rejecting obviously-wrong values.
-  kid: z.string().min(20).max(80),
+  kid: Kid,
 });
 
 export const SubmitBody = z.object({
-  kid: z.string(),
-  challenge: z.string(),
+  kid: Kid,
+  challenge: z.string().regex(/^[0-9a-f]{32}$/),
   client_name: z.string().min(1).max(80),
-  client_uri: z.string().url().optional(),
+  client_uri: z.string().url().max(500).optional(),
   signature_agent_url: z
     .string()
     .url()
+    .max(500)
     .refine((u) => u.startsWith("https://"), { message: "must be https://" }),
-  expected_user_agent: z.string().optional(),
-  contacts: z.array(z.string()).optional(),
-  purpose: z.string().optional(),
-  targeted_content: z.string().optional(),
-  rate_control: z.string().optional(),
+  expected_user_agent: Short.optional(),
+  contacts: z.array(z.string().max(200)).max(10).optional(),
+  purpose: Short.optional(),
+  targeted_content: Short.optional(),
+  rate_control: Short.optional(),
   keys: z.object({
     keys: z
       .array(
         z.object({
           kty: z.literal("OKP"),
           crv: z.literal("Ed25519"),
-          kid: z.string(),
-          x: z.string(),
+          kid: Kid,
+          x: X,
         }),
       )
-      .min(1),
+      .min(1)
+      .max(4),
   }),
 });
 

@@ -41,13 +41,13 @@
  *
  * Local-dev tip: if you're hacking on the wbauth TS SDK in this
  * monorepo, `cd typescript && npm link` then `cd examples && npm link
- * wbauth` so the demo picks up your local build.
+ * wb-auth` so the demo picks up your local build.
  *
  * Per CONTEXT D-70: this demo does NOT depend on Cloudflare verifier
  * round-trip. Daily canary (Phase 1) covers full Cloudflare e2e.
  */
 import { Stagehand } from "@browserbasehq/stagehand";
-import { Identity, applyTo } from "wbauth";
+import { Identity, applyTo } from "wb-auth";
 
 const WORKER_URL = "https://wbauth.silov801.workers.dev/agents";
 const KEY_PATH = `${process.env.HOME}/.config/wbauth/key.pem`;
