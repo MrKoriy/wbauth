@@ -1,12 +1,21 @@
-# wbauth (Python)
+# wbauth — Web Bot Auth for Python
+
+Ed25519 [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) request signing with the IETF
+Web Bot Auth profile, plus a pre-flight policy inspector (robots.txt, ai.txt,
+llms.txt, signing directory). Python ≥ 3.11. TypeScript SDK: `npm install wb-auth`.
 
 ```bash
-pip install wbauth   # Phase 5 — not yet published
+pip install wbauth                 # core: httpx + requests adapters, inspector, CLI
+pip install "wbauth[playwright]"   # + Playwright adapter
+pip install "wbauth[http2]"        # + HTTP/2 for a shared inspector client
+```
 
-# From source (Phase 1):
-uv sync --all-extras --dev --all-packages
+From source:
+
+```bash
+uv sync --locked --all-extras --dev --all-packages
 ../scripts/post-sync.sh   # macOS-only; clears UF_HIDDEN flag on uv editable .pth
-uv run wbauth keygen
+uv run pytest python/tests
 ```
 
 ## Why `scripts/post-sync.sh`?
@@ -15,8 +24,8 @@ On macOS, `uv` (≤0.11.7) sets the `UF_HIDDEN` file flag on the editable-instal
 marker file `.venv/lib/python*/site-packages/_editable_impl_wbauth.pth`. Python
 3.13+ silently skips hidden `.pth` files per CPython security policy
 (GH-99458 / issue #50028). Symptom: `import wbauth` fails with
-`ModuleNotFoundError` even though `wbauth-0.1.0.dist-info/` is present in
+`ModuleNotFoundError` even though `wbauth-*.dist-info/` is present in
 site-packages. The post-sync script clears `UF_HIDDEN` via `chflags nohidden`.
 No-op on Linux/Windows. Safe to re-run anytime.
 
-See repo root README for the full project description.
+See the [repository README](../README.md) for usage.

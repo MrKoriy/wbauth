@@ -43,7 +43,7 @@ describe("applyTo", () => {
 		const id = await Identity.fromTestKey("https://example.com/agent.json");
 		const { page, invoke } = fakePage();
 		await applyTo(page, id);
-		const continueSpy = vi.fn(async () => {});
+		const continueSpy = vi.fn(async (_opts?: unknown) => {});
 		await invoke(
 			{ continue: continueSpy },
 			{
@@ -67,7 +67,7 @@ describe("applyTo", () => {
 		const id = await Identity.fromTestKey("https://example.com/agent.json");
 		const { page, invoke } = fakePage();
 		await applyTo(page, id);
-		const continueSpy = vi.fn(async () => {});
+		const continueSpy = vi.fn(async (_opts?: unknown) => {});
 		const buf = Buffer.from("hello-from-playwright");
 		await invoke(
 			{ continue: continueSpy },
@@ -90,7 +90,7 @@ describe("applyTo", () => {
 		const id = await Identity.fromTestKey("https://example.com/agent.json");
 		const { page, invoke } = fakePage();
 		await applyTo(page, id);
-		const continueSpy = vi.fn(async () => {});
+		const continueSpy = vi.fn(async (_opts?: unknown) => {});
 		const mockReq = {
 			method: () => "GET",
 			url: () => "https://x/",
@@ -115,7 +115,7 @@ describe("applyTo", () => {
 		const { page, invoke } = fakePage();
 		await applyTo(page, id);
 
-		const continueSpy = vi.fn(async () => {});
+		const continueSpy = vi.fn(async (_opts?: unknown) => {});
 		await invoke(
 			{ continue: continueSpy },
 			{

@@ -3,17 +3,23 @@ on: [push, pull_request]
 jobs:
   python:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
-      - name: Sync workspace
-        run: uv sync --all-extras --dev --all-packages
-      - name: Lint (ruff)
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.0"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Sync workspace (locked)
+        run: uv sync --locked --all-extras --dev --all-packages
+      - name: Lint (ruff, pinned in uv.lock)
         run: uv run ruff check python/
-      - name: Type check (pyright)
-        # cd into python/ so pyright auto-discovers `python/pyrightconfig.json`
-        # (it walks up from CWD, not from CLI-arg paths). The config relaxes
-        # Optional access for tests and silences pyauth's private-import noise.
+      - name: Type check (pyright, pinned in uv.lock)
+        # cd into python/ so pyright auto-discovers `python/pyrightconfig.json`.
         run: cd python && uv run pyright src tests
       - name: Tests
-        run: uv run pytest python/tests/ -v
+        run: uv run pytest python/tests -q

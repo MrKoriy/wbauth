@@ -5,6 +5,12 @@ Re-exports the three drop-in adapters so users can write:
 """
 from .httpx_auth import WebBotAuth
 from .playwright import attach_signing
-from .requests_adapter import WebBotAuthAdapter
+from .requests_adapter import WebBotAuthAdapter, WebBotAuthTransport, signed_session
 
-__all__ = ["WebBotAuth", "WebBotAuthAdapter", "attach_signing"]
+__all__ = [
+    "WebBotAuth",
+    "WebBotAuthAdapter",
+    "WebBotAuthTransport",
+    "attach_signing",
+    "signed_session",
+]

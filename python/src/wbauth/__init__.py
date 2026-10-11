@@ -3,7 +3,13 @@
 Phase 1 (current): identity + signer + JWKS + CLI keygen.
 Phase 2: HTTP-client adapters + policy inspector.
 """
-from .adapters import WebBotAuth, WebBotAuthAdapter, attach_signing
+from .adapters import (
+    WebBotAuth,
+    WebBotAuthAdapter,
+    WebBotAuthTransport,
+    attach_signing,
+    signed_session,
+)
 from .identity import Identity, KeyPair
 from .normalized_request import NormalizedRequest
 from .policy import (
@@ -16,7 +22,7 @@ from .policy import (
 )
 from .signer import SignatureHeaders, sign
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "AiTxtResult",
@@ -30,8 +36,10 @@ __all__ = [
     "SitePolicy",
     "WebBotAuth",
     "WebBotAuthAdapter",
+    "WebBotAuthTransport",
     "__version__",
     "attach_signing",
     "inspect",
     "sign",
+    "signed_session",
 ]

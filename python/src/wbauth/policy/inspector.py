@@ -3,39 +3,31 @@
 Public entry point::
 
     from wbauth import inspect
-    policy = await inspect("https://example.com/path")
+    policy = await inspect("https://example.com/path", user_agent="MyBot/1.0")
 
 The inspector fans out four parallel HTTPS GETs (per POLICY-02, each
 bounded at 3 s) to the user-supplied origin's well-known endpoints,
 parses each response, computes a deterministic strict verdict (D-18),
 and returns a frozen ``SitePolicy``.
 
-**Open-question resolutions encoded here** (locked in the planner phase;
-documented inline so users don't have to chase the planning docs):
+Behaviour worth knowing:
 
-  1. **Redirects** — every well-known fetch passes
-     ``follow_redirects=True, max_redirects=3``. Some origins serve
-     ``/robots.txt`` via 301 → ``/robots.txt.gz`` etc.; capping at 3 hops
-     bounds the worst-case latency while accommodating the common case.
-
-  2. **Robots evaluation** — ``protego.can_fetch(target_url, "wbauth/0.1")``
-     is invoked with the **input URL's full path** (not "/"). This answers
-     "can I crawl THIS URL?" — matching user intent.
-
-  3. **Cache key** — ``(host, endpoint_name)`` for the parsed result. The
-     cache holds ``RobotsResult`` etc.; the verdict (which is path-dependent
-     for robots) is computed per-call from the cached parse. This keeps the
-     cache compact while remaining RFC 9309-correct.
+  1. **Redirects** — up to 5 hops (RFC 9309 §2.3.1.2). A longer chain means
+     robots.txt is treated as *unavailable* (no restriction).
+  2. **Robots evaluation** — the parsed rules are cached per host and
+     evaluated per call against the **target URL's full path** and the
+     caller's ``user_agent``. A cached verdict is never reused across paths.
+  3. **Status codes** — 4xx (except 429) = endpoint not published (cached
+     negatively); 429 / 5xx / network errors on robots.txt = complete
+     disallow (RFC 9309 §2.3.1.4).
+  4. **Size caps** — robots.txt is truncated at 500 KiB (RFC 9309 §2.5);
+     other endpoints fail with ``FetchError`` above 1 MB. Bodies are
+     streamed, so a hostile origin cannot exhaust memory.
+  5. **Connection reuse** — pass your own ``httpx.AsyncClient`` (e.g. with
+     ``http2=True``) via ``client=`` to reuse connections across calls.
 
 **POLICY-08 invariant.** Inspector makes ZERO HTTP calls to wbauth-controlled
-domains — only to the user-supplied origin. Verified by (a) the grep gate in
-the plan's verification step (must return zero non-comment matches for any
-wbauth-owned hostname literal) and (b) ``test_only_user_supplied_host_is_fetched``
-end-to-end via pytest-httpx.
-
-**Pitfall 7.** The ``httpx.AsyncClient`` is always entered with ``async with``
-to ensure the connection pool is closed on every code path (including
-exception propagation).
+domains — only to the user-supplied origin.
 """
 from __future__ import annotations
 
@@ -46,34 +38,54 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from .cache import PolicyCache
-from .errors import RobotsParseError
+from .cache import Absent, PolicyCache
+from .errors import FetchError, RobotsParseError
 from .parsers import (
     parse_ai_txt,
     parse_llms_txt,
-    parse_robots,
     parse_signing_directory,
 )
+from .parsers.robots import (
+    DEFAULT_USER_AGENT,
+    RobotsSource,
+    evaluate_robots,
+    parse_robots_source,
+)
 from .policy import SitePolicy
-from .verdict import compute_verdict
+from .verdict import compute_verdict, is_unavailable_status
 
 PER_ENDPOINT_TIMEOUT = 3.0  # POLICY-02
-USER_AGENT = "wbauth/0.1"   # D-20 — every fetch sends User-Agent: wbauth/0.1
-MAX_REDIRECTS = 3           # Open question #1
+USER_AGENT = DEFAULT_USER_AGENT  # back-compat alias
+MAX_REDIRECTS = 5           # RFC 9309 §2.3.1.2
+
+ROBOTS_MAX_BYTES = 500 * 1024   # RFC 9309 §2.5 — parse at least 500 KiB, ignore the rest
+OTHER_MAX_BYTES = 1_000_000
 
 _ENDPOINT_NAMES = ("robots", "ai_txt", "llms_txt", "signing_directory")
 
-# Module-level cache singleton (D-23: per-process, no persistence).
+# Module-level singleton cache (D-22). Per-process; tests reset it.
 _CACHE = PolicyCache()
 
 
 def _reset_cache_for_tests() -> None:
-    """Test-only seam: clear the inspector cache between cases.
-
-    Not part of the public API — name is leading-underscore by convention.
-    """
+    """Reset the module-level cache (test isolation hook)."""
     global _CACHE
     _CACHE = PolicyCache()
+
+
+def _origin_host(url: str) -> str:
+    """Return ``host[:port]`` without userinfo; IPv6 literals bracketed."""
+    parsed = urlsplit(url)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"inspect: URL has no host: {url!r}")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"inspect: URL must be http(s): {url!r}")
+    host = f"[{hostname}]" if ":" in hostname else hostname
+    port = parsed.port
+    if port and port != 443:
+        host = f"{host}:{port}"
+    return host.rstrip(".")
 
 
 def _endpoints(host: str) -> dict[str, str]:
@@ -87,51 +99,78 @@ def _endpoints(host: str) -> dict[str, str]:
     }
 
 
-async def _fetch_one(client: httpx.AsyncClient, url: str) -> httpx.Response:
-    """One bounded fetch. Caller wraps in wait_for + gather(return_exceptions=True).
+_DROP_ON_REBUILD = ("content-encoding", "content-length", "transfer-encoding")
 
-    Raises ``httpx.HTTPStatusError`` on 4xx/5xx (so the verdict engine sees
-    the status code in ``errors[endpoint]``).
-    """
-    response = await client.get(
+
+async def _fetch_one(
+    client: httpx.AsyncClient, name: str, url: str, user_agent: str
+) -> httpx.Response:
+    """Stream one endpoint with a byte cap; raise on non-2xx."""
+    cap = ROBOTS_MAX_BYTES if name == "robots" else OTHER_MAX_BYTES
+    async with client.stream(
+        "GET",
         url,
         follow_redirects=True,
-        headers={"User-Agent": USER_AGENT},
-    )
-    response.raise_for_status()
-    return response
+        headers={"User-Agent": user_agent},
+        timeout=PER_ENDPOINT_TIMEOUT,
+    ) as response:
+        response.raise_for_status()
+        buf = bytearray()
+        async for chunk in response.aiter_bytes():
+            buf += chunk
+            if len(buf) > cap:
+                if name == "robots":
+                    del buf[cap:]
+                    break
+                raise FetchError(f"{name} body exceeds {cap} bytes")
+        headers = [
+            (k, v) for k, v in response.headers.multi_items()
+            if k.lower() not in _DROP_ON_REBUILD
+        ]
+        return httpx.Response(
+            response.status_code,
+            headers=headers,
+            content=bytes(buf),
+            request=response.request,
+        )
 
 
 async def _fetch_missing(
-    host: str, missing: list[str]
+    host: str,
+    missing: list[str],
+    user_agent: str,
+    client: httpx.AsyncClient | None,
 ) -> dict[str, httpx.Response | BaseException]:
-    """Fetch the named endpoints in parallel; isolate per-endpoint failures.
-
-    Returns ``{endpoint_name: Response | Exception}``. ``return_exceptions=True``
-    on ``asyncio.gather`` ensures one failed endpoint doesn't tank the others
-    (Pitfall 4).
-    """
+    """Fetch every endpoint in ``missing`` in parallel; never raises."""
     if not missing:
         return {}
     urls = _endpoints(host)
-    async with httpx.AsyncClient(
-        timeout=PER_ENDPOINT_TIMEOUT, max_redirects=MAX_REDIRECTS
-    ) as client:
+
+    async def run(c: httpx.AsyncClient) -> list[Any]:
         coros = [
             asyncio.wait_for(
-                _fetch_one(client, urls[name]), timeout=PER_ENDPOINT_TIMEOUT
+                _fetch_one(c, name, urls[name], user_agent),
+                timeout=PER_ENDPOINT_TIMEOUT,
             )
             for name in missing
         ]
-        results = await asyncio.gather(*coros, return_exceptions=True)
+        return await asyncio.gather(*coros, return_exceptions=True)
+
+    if client is not None:
+        results = await run(client)
+    else:
+        async with httpx.AsyncClient(
+            timeout=PER_ENDPOINT_TIMEOUT, max_redirects=MAX_REDIRECTS
+        ) as own:
+            results = await run(own)
     return dict(zip(missing, results, strict=True))
 
 
-def _parse_response(name: str, response: httpx.Response, target_url: str) -> Any:
-    """Dispatch to the right parser by endpoint name."""
+def _parse_response(name: str, response: httpx.Response) -> Any:
+    """Dispatch to the per-endpoint parser (robots returns RobotsSource)."""
     ct = response.headers.get("content-type")
     if name == "robots":
-        return parse_robots(response.text, ct, target_url, USER_AGENT)
+        return parse_robots_source(response.text, ct)
     if name == "ai_txt":
         return parse_ai_txt(response.text)
     if name == "llms_txt":
@@ -141,105 +180,114 @@ def _parse_response(name: str, response: httpx.Response, target_url: str) -> Any
     raise ValueError(f"unknown endpoint {name!r}")  # defensive
 
 
-async def inspect(url: str) -> SitePolicy:
-    """Run the pre-flight policy inspector for ``url`` and return a SitePolicy.
+def _absent_error(url: str, status: int) -> httpx.HTTPStatusError:
+    req = httpx.Request("GET", url)
+    return httpx.HTTPStatusError(
+        f"{status} (cached)", request=req, response=httpx.Response(status, request=req)
+    )
+
+
+async def inspect(
+    url: str,
+    *,
+    user_agent: str | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> SitePolicy:
+    """Run the pre-flight inspector against ``url``.
 
     Args:
-      url: target URL the agent intends to fetch (must include scheme + host).
-
-    Returns:
-      A frozen ``SitePolicy`` with all 9 fields populated per D-17. The
-      ``verdict`` is one of ``"allowed"`` / ``"restricted"`` / ``"forbidden"``;
-      the ``reasons`` list explains what drove that verdict. ``partial=True``
-      iff any endpoint failed (errors keyed by endpoint name in ``errors``).
+        url: Target URL, e.g. ``https://example.com/articles/42``.
+        user_agent: The agent's User-Agent. robots.txt rules are evaluated for
+            it and it is sent on the policy fetches. Default ``"wbauth/0.1"``.
+        client: Optional shared ``httpx.AsyncClient`` for connection reuse.
+            It is not closed by ``inspect``.
 
     Raises:
-      ValueError: if the URL has no host component.
-
-    Notes:
-      - Errors may include the input URL in their messages; sanitize tokens
-        from URLs before passing them to ``inspect()``.
-      - Do not pass untrusted URLs (SSRF surface — same trust model as
-        ``requests.get(url)``).
+        ValueError: when the URL is not http(s) or has no host.
     """
-    parsed = urlsplit(url)
-    host = parsed.netloc
-    if not host:
-        raise ValueError(f"inspect: URL has no host: {url!r}")
+    host = _origin_host(url)
+    ua = user_agent or DEFAULT_USER_AGENT
+    urls = _endpoints(host)
 
-    # 1. Cache lookup per (host, endpoint).
-    results: dict[str, Any] = {ep: None for ep in _ENDPOINT_NAMES}
+    raw: dict[str, Any] = {ep: None for ep in _ENDPOINT_NAMES}
+    errors: dict[str, Exception] = {}
     missing: list[str] = []
     for ep in _ENDPOINT_NAMES:
         entry = _CACHE.get(host, ep)
-        if entry is not None:
-            results[ep] = entry.value
-        else:
+        if entry is None:
             missing.append(ep)
+        elif isinstance(entry.value, Absent):
+            errors[ep] = _absent_error(urls[ep], entry.value.status_code)
+        else:
+            raw[ep] = entry.value
 
-    # 2. Fetch missing endpoints in parallel (POLICY-02 + Pitfall 4).
-    fetched = await _fetch_missing(host, missing)
+    fetched = await _fetch_missing(host, missing, ua, client)
 
-    errors: dict[str, Exception] = {}
-
-    # 3. Parse newly fetched responses + populate cache for successes.
     for ep, fr in fetched.items():
         if isinstance(fr, BaseException):
-            # asyncio.TimeoutError → surface as httpx.TimeoutException so the
-            # verdict engine's robots-timeout branch matches uniformly.
             if isinstance(fr, asyncio.TimeoutError) and not isinstance(
                 fr, httpx.TimeoutException
             ):
                 errors[ep] = httpx.TimeoutException(
                     f"{ep} fetch exceeded {PER_ENDPOINT_TIMEOUT}s"
                 )
+            elif isinstance(fr, httpx.HTTPStatusError):
+                errors[ep] = fr
+                status = fr.response.status_code
+                if is_unavailable_status(status):
+                    _CACHE.set(
+                        host, ep, Absent(status),
+                        cache_control=fr.response.headers.get("cache-control"),
+                    )
             elif isinstance(fr, Exception):
                 errors[ep] = fr
             else:  # pragma: no cover — BaseException not Exception (e.g. CancelledError)
                 errors[ep] = RuntimeError(repr(fr))
             continue
         try:
-            parsed_value = _parse_response(ep, fr, url)
-            results[ep] = parsed_value
-            _CACHE.set(
-                host,
-                ep,
-                parsed_value,
-                cache_control=fr.headers.get("cache-control"),
-                etag=fr.headers.get("etag"),
-            )
+            parsed_value = _parse_response(ep, fr)
         except RobotsParseError as e:
-            errors[ep] = e  # let verdict engine map to "forbidden"
-        except Exception as e:
+            errors[ep] = e  # verdict engine maps to "forbidden"
+            continue
+        except Exception as e:  # noqa: BLE001 — per-endpoint isolation
             errors[ep] = e
+            continue
+        raw[ep] = parsed_value
+        _CACHE.set(
+            host, ep, parsed_value,
+            cache_control=fr.headers.get("cache-control"),
+            etag=fr.headers.get("etag"),
+        )
 
-    # `partial` reflects unresolved or terminal failures only. A 404 on any
-    # endpoint is "absent" not "errored" per the verdict rule table — robots-404
-    # is allow-leaning (RFC 9309) and ai/llms/signing-directory-404 are neutral.
-    # Treating 404s as partial would trigger the D-18 downgrade and turn every
-    # well-behaved minimal site into `restricted`. Errors are still surfaced in
-    # `errors` so the verdict engine can read them; partial is the trigger for
-    # the strict-philosophy downgrade and should fire only on real failures.
+    robots_src = raw["robots"]
+    robots = (
+        evaluate_robots(robots_src, url, ua)
+        if isinstance(robots_src, RobotsSource)
+        else None
+    )
+
     def _is_partial_failure(exc: Exception) -> bool:
-        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404:
+        if isinstance(exc, httpx.HTTPStatusError) and is_unavailable_status(
+            exc.response.status_code
+        ):
             return False
-        return True
+        return not isinstance(exc, httpx.TooManyRedirects)
 
     partial = any(_is_partial_failure(e) for e in errors.values())
     verdict, reasons = compute_verdict(
-        robots=results["robots"],
-        ai_txt=results["ai_txt"],
-        llms_txt=results["llms_txt"],
-        signing_directory=results["signing_directory"],
+        robots=robots,
+        ai_txt=raw["ai_txt"],
+        llms_txt=raw["llms_txt"],
+        signing_directory=raw["signing_directory"],
         errors=errors,
         partial=partial,
     )
     return SitePolicy(
         url=url,
-        robots=results["robots"],
-        ai_txt=results["ai_txt"],
-        llms_txt=results["llms_txt"],
-        signing_directory=results["signing_directory"],
+        robots=robots,
+        ai_txt=raw["ai_txt"],
+        llms_txt=raw["llms_txt"],
+        signing_directory=raw["signing_directory"],
         verdict=verdict,
         reasons=reasons,
         partial=partial,

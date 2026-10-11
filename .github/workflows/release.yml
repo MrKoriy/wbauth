@@ -7,36 +7,43 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write   # PyPI trusted publishing + npm provenance
 
 jobs:
-  publish-pypi:
-    name: Build & Publish Python SDK to PyPI
+  check-versions:
+    name: Tag matches package versions
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Run Test Suite
+      - name: Compare tag with python/pyproject.toml, typescript/package.json and VERSION constants
         run: |
-          uv sync --all-extras
-          uv run pytest -q
+          TAG="${GITHUB_REF_NAME#v}"
+          PY=$(grep -m1 '^version = ' python/pyproject.toml | cut -d'"' -f2)
+          PYI=$(grep -m1 '^__version__ = ' python/src/wbauth/__init__.py | cut -d'"' -f2)
+          TS=$(node -p "require('./typescript/package.json').version")
+          TSI=$(grep -m1 'export const VERSION' typescript/src/index.ts | cut -d'"' -f2)
+          echo "tag=$TAG python=$PY/$PYI npm=$TS/$TSI"
+          for v in "$PY" "$PYI" "$TS" "$TSI"; do
+            [ "$v" = "$TAG" ] || { echo "::error::version mismatch ($v != $TAG)"; exit 1; }
+          done
 
+  publish-pypi:
+    name: Build & Publish Python SDK to PyPI
+    needs: check-versions
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.0"
+          python-version: "3.12"
+      - name: Run test suite
+        run: |
+          uv sync --locked --all-extras --dev --all-packages
+          uv run pytest python/tests -q
       - name: Build distribution packages
-        run: uv build
-
+        run: uv build --package wbauth --out-dir python/dist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
@@ -44,35 +51,25 @@ jobs:
           skip-existing: true
 
   publish-npm:
-    name: Build & Publish TypeScript SDK to npm
+    name: Build & Publish TypeScript SDK to npm (wb-auth)
+    needs: check-versions
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: typescript
+    environment: npm
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
-
-      - name: Run Test Suite
-        run: pnpm test
-
-      - name: Build distribution artifacts
-        run: pnpm run build
-
-      - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks
+          cache: npm
+      - run: npm ci
+      - name: Lint, type check, test, build
+        run: |
+          npm run lint --workspace=wb-auth
+          npm run typecheck --workspace=wb-auth
+          npm run test --workspace=wb-auth
+          npm run build --workspace=wb-auth
+      - name: Publish to npm with provenance
+        run: npm publish --workspace=wb-auth --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

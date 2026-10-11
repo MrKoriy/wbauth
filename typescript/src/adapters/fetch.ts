@@ -5,15 +5,28 @@
  * `identity` only. Returns a function whose signature matches `typeof fetch`,
  * so user code can swap `fetch` for `signedFetch` without other changes.
  *
- * v1 limitation (Pitfall 4): streaming bodies are NOT supported. The adapter
- * reads the full body via `req.clone().arrayBuffer()` to compute Content-Digest.
+ * - Request-object inputs keep their `signal`, `redirect`, `credentials`,
+ *   `cache`, `keepalive`, `integrity` and `referrerPolicy`.
+ * - Re-sending an already signed request (retry wrappers) produces exactly one
+ *   fresh signature — stale Signature* headers are replaced, never merged.
+ *
+ * v1 limitation: streaming bodies are buffered (`req.clone().arrayBuffer()`)
+ * so Content-Digest can be computed.
  */
 
 import type { Identity } from "../identity.js";
 import { sign } from "../signer.js";
-import { ensureContentDigest } from "./_utils.js";
+import { applyUserAgent, ensureContentDigest } from "./_utils.js";
 
-export function createSignedFetch(identity: Identity): typeof fetch {
+export interface SignedFetchOptions {
+	/** Underlying fetch implementation. Defaults to `globalThis.fetch` at call time. */
+	fetch?: typeof fetch;
+}
+
+export function createSignedFetch(
+	identity: Identity,
+	options: SignedFetchOptions = {},
+): typeof fetch {
 	return async function signedFetch(
 		input: RequestInfo | URL,
 		init: RequestInit = {},
@@ -29,34 +42,37 @@ export function createSignedFetch(identity: Identity): typeof fetch {
 			body = buf.byteLength > 0 ? new Uint8Array(buf) : null;
 		}
 
-		// Build mutable headers dict from the Request.
+		// Mutable header dict (Headers already lower-cases + de-duplicates).
 		const headers: Record<string, string> = {};
 		req.headers.forEach((value, key) => {
 			headers[key] = value;
 		});
 
-		// Auto-Content-Digest BEFORE sign() (mirror Python ordering — fulfills
-		// signer's content-digest precondition for POST/PUT/PATCH + body).
+		// Auto-Content-Digest BEFORE sign() (signer precondition for POST/PUT/PATCH + body).
 		ensureContentDigest(method, headers, body);
 
-		// Sign — mutates `headers` to add Signature, Signature-Input, Signature-Agent.
+		// Sign — replaces stale Signature* headers, then writes fresh ones.
 		await sign({ method, url, headers, body }, identity);
+		applyUserAgent(headers, identity.userAgent);
 
-		// Conditional UA injection (mirror Python adapter behavior).
-		if (
-			identity.userAgent &&
-			!Object.keys(headers).some((k) => k.toLowerCase() === "user-agent")
-		) {
-			headers["User-Agent"] = identity.userAgent;
-		}
-
-		// Cast body: Uint8Array is a valid BodyInit at runtime (web fetch spec)
-		// but DOM typing wants ArrayBufferView/string/Blob etc. The cast is safe.
-		return fetch(url, {
+		const outInit: RequestInit = {
 			...init,
 			method,
 			headers,
+			// Uint8Array is a valid BodyInit at runtime; DOM typings disagree.
 			body: (body ?? undefined) as BodyInit | undefined,
-		});
+			signal: init.signal ?? req.signal,
+			redirect: init.redirect ?? req.redirect,
+			credentials: init.credentials ?? req.credentials,
+			cache: init.cache ?? req.cache,
+			keepalive: init.keepalive ?? req.keepalive,
+		};
+		const integrity = init.integrity ?? req.integrity;
+		if (integrity) outInit.integrity = integrity;
+		const referrerPolicy = init.referrerPolicy ?? req.referrerPolicy;
+		if (referrerPolicy) outInit.referrerPolicy = referrerPolicy;
+
+		const doFetch = options.fetch ?? globalThis.fetch;
+		return doFetch(url, outInit);
 	};
 }

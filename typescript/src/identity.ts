@@ -119,8 +119,8 @@ export class Identity {
 	 * `{keys: [active_jwk, retiring_jwk]}` after a rotation. Active is always
 	 * first. Verifiers select by `kid`. Mirror of Python `export_jwks`.
 	 */
-	exportJwks(): { keys: JsonWebKey[] } {
-		const keys: JsonWebKey[] = [this._active.publicJwk];
+	exportJwks(): { keys: Array<JsonWebKey & { kid: string }> } {
+		const keys: Array<JsonWebKey & { kid: string }> = [this._active.publicJwk];
 		if (this._retiring) keys.push(this._retiring.publicJwk);
 		return { keys };
 	}
@@ -163,9 +163,12 @@ export class Identity {
 	 * For tests + Cloudflare debug smoke checks. NEVER use in production.
 	 * Does NOT write any file to disk.
 	 */
-	static async fromTestKey(signatureAgentUrl: string): Promise<Identity> {
+	static async fromTestKey(
+		signatureAgentUrl: string,
+		opts: Omit<IdentityOptions, "signatureAgentUrl"> = {},
+	): Promise<Identity> {
 		const pair = await keyPairFromJwk(TEST_KEY_JWK);
-		return new Identity(pair, { signatureAgentUrl });
+		return new Identity(pair, { ...opts, signatureAgentUrl });
 	}
 
 	// ---------- Redaction guarantees (IDENT-08) ----------

@@ -1,11 +1,11 @@
 /**
  * wbauth: Web Bot Auth (RFC 9421) TypeScript SDK — Phase 4 public surface.
  *
- * Per CONTEXT D-74: flat root exports. Subpath exports (`wbauth/adapters`)
+ * Per CONTEXT D-74: flat root exports. Subpath exports (`wb-auth/adapters`)
  * are a v1.x optimization, not required for Phase 4.
  *
  * Quickstart:
- *   import { Identity, createSignedFetch } from "wbauth";
+ *   import { Identity, createSignedFetch } from "wb-auth";
  *   const id = await Identity.loadOrGenerate("./key.pem", {
  *     signatureAgentUrl: "https://example.com/.well-known/.../<kid>",
  *   });
@@ -13,7 +13,9 @@
  *   const res = await sf("https://api.example.com/data");
  */
 
+export type { SignedFetchOptions } from "./adapters/fetch.js";
 export { createSignedFetch } from "./adapters/fetch.js";
+export type { ApplyToOptions } from "./adapters/playwright.js";
 export { applyTo } from "./adapters/playwright.js";
 export type { IdentityOptions, KeyPair } from "./identity.js";
 export { DEFAULT_KEY_PATH, Identity } from "./identity.js";
@@ -21,4 +23,4 @@ export type { NormalizedRequest } from "./normalized-request.js";
 export type { SignatureHeaders, SignOptions } from "./signer.js";
 export { sign } from "./signer.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
