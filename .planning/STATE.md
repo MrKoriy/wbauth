@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v1.1.1
 milestone_name: milestone
-status: verifying
+status: ready-for-release
 stopped_at: Phase 4 context gathered
 last_updated: "2026-05-10T20:11:10.374Z"
 last_activity: 2026-05-10
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 ## Current Position
 
-Phase: 04 (typescript-sdk-framework-integrations) — EXECUTING
+Phase: 05 (pre-army-hardening-docs-launch) — EXECUTING
 Next phase: 04 (TypeScript SDK & Framework Integrations) — has been runnable in parallel since Phase 1's test vectors locked
 Plan: 3 of 3
 Status: Phase complete — ready for verification
