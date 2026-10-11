@@ -9,7 +9,7 @@ Composition (per RESEARCH §"Composition"):
   1. If ANY rule contributes ``forbidden`` → return ``"forbidden"``
      (terminal short-circuit).
   2. Else, if ANY rule contributes ``restricted`` → return ``"restricted"``.
-  3. Else, if ``robots`` was fetched cleanly (or 404'd) AND no signals
+  3. Else, if ``robots`` was fetched cleanly (or was 4xx-unavailable) AND no signals
      against → ``"allowed"``.
   4. Tie-break (D-18): if tentative verdict is ``"allowed"`` AND
      ``partial=True`` → DOWNGRADE to ``"restricted"``.
@@ -43,6 +43,15 @@ _LLMS_RESTRICTIVE_RE = re.compile(
 )
 
 
+def is_unavailable_status(status: int) -> bool:
+    """RFC 9309 §2.3.1.3: 4xx (except 429 Too Many Requests) = "unavailable".
+
+    Unavailable policy files impose no restriction. 429 and 5xx mean the
+    server is unreachable, which §2.3.1.4 treats as complete disallow.
+    """
+    return 400 <= status < 500 and status != 429
+
+
 def compute_verdict(
     robots: RobotsResult | None,
     ai_txt: AiTxtResult | None,
@@ -61,22 +70,44 @@ def compute_verdict(
 
     # --- Robots branches (RESEARCH rule rows 1-6) ---------------------
     robots_err = errors.get("robots")
+    robots_unavailable = False  # RFC 9309 §2.3.1.3 — 4xx / redirect loop
     if isinstance(robots_err, RobotsParseError):
         forbidden_signals.append(
             "robots.txt unparseable (HTML response); assuming disallowed per strict policy"
         )
-    elif isinstance(robots_err, httpx.TimeoutException):
-        restricted_signals.append("robots.txt fetch timed out (3s); cannot evaluate")
     elif isinstance(robots_err, httpx.HTTPStatusError):
         status = robots_err.response.status_code
-        if status == 404:
+        if is_unavailable_status(status):
+            robots_unavailable = True
+            label = "absent" if status in (404, 410) else "unavailable"
             reasons.append(
-                "robots.txt absent (404); no robots-based restriction per RFC 9309"
+                f"robots.txt {label} ({status}); no robots-based restriction "
+                "per RFC 9309 §2.3.1.3"
             )
         else:
-            restricted_signals.append(
-                f"robots.txt fetch returned {status}; cannot evaluate"
+            forbidden_signals.append(
+                f"robots.txt unreachable ({status}); assuming complete disallow "
+                "per RFC 9309 §2.3.1.4"
             )
+    elif isinstance(robots_err, httpx.TooManyRedirects):
+        robots_unavailable = True
+        reasons.append(
+            "robots.txt redirect limit exceeded; treated as unavailable "
+            "per RFC 9309 §2.3.1.2"
+        )
+    elif isinstance(robots_err, httpx.TimeoutException):
+        forbidden_signals.append(
+            "robots.txt fetch timed out; assuming complete disallow per RFC 9309 §2.3.1.4"
+        )
+    elif isinstance(robots_err, httpx.RequestError):
+        forbidden_signals.append(
+            f"robots.txt unreachable ({type(robots_err).__name__}); assuming "
+            "complete disallow per RFC 9309 §2.3.1.4"
+        )
+    elif robots_err is not None:
+        restricted_signals.append(
+            f"robots.txt could not be evaluated ({type(robots_err).__name__})"
+        )
     elif robots is not None:
         if robots.can_fetch_url:
             reasons.append("robots.txt allows our user-agent for this path")
@@ -84,8 +115,9 @@ def compute_verdict(
             forbidden_signals.append(
                 "robots.txt disallows our user-agent for this path"
             )
+        if robots.crawl_delay:
+            reasons.append(f"robots.txt Crawl-delay: {robots.crawl_delay:g}s")
 
-    # Pitfall 2: surface UA assumption explicitly when we evaluated robots.
     if robots is not None:
         reasons.insert(
             0, f"evaluated against User-Agent='{robots.user_agent_evaluated}'"
@@ -123,10 +155,7 @@ def compute_verdict(
         return "restricted", reasons + restricted_signals
 
     # Tentative allowed — only if robots was fetched cleanly OR 404'd cleanly.
-    robots_clean = (robots is not None) or (
-        isinstance(robots_err, httpx.HTTPStatusError)
-        and robots_err.response.status_code == 404
-    )
+    robots_clean = (robots is not None and robots_err is None) or robots_unavailable
     if robots_clean:
         if partial:
             errored = ", ".join(sorted(errors.keys()))

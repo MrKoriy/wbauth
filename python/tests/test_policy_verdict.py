@@ -131,21 +131,23 @@ def test_verdict_partial_downgrades_allowed_to_restricted():
     assert any("partial policy fetch" in r and "downgrades to restricted" in r for r in reasons)
 
 
-def test_verdict_robots_timeout_yields_restricted():
+def test_verdict_robots_timeout_yields_forbidden():
+    """RFC 9309 §2.3.1.4: unreachable robots.txt → assume complete disallow."""
     verdict, reasons = compute_verdict(
         robots=None, ai_txt=None, llms_txt=None, signing_directory=None,
         errors={"robots": httpx.TimeoutException("3s")}, partial=True,
     )
-    assert verdict == "restricted"
+    assert verdict == "forbidden"
     assert any("timed out" in r for r in reasons)
 
 
-def test_verdict_robots_5xx_yields_restricted():
+def test_verdict_robots_5xx_yields_forbidden():
+    """RFC 9309 §2.3.1.4: 5xx robots.txt → assume complete disallow."""
     verdict, reasons = compute_verdict(
         robots=None, ai_txt=None, llms_txt=None, signing_directory=None,
         errors={"robots": _http_status(503)}, partial=True,
     )
-    assert verdict == "restricted"
+    assert verdict == "forbidden"
     assert any("503" in r for r in reasons)
 
 
@@ -171,8 +173,8 @@ def test_verdict_llms_txt_no_automated_access_yields_restricted():
     assert verdict == "restricted"
 
 
-def test_verdict_no_clean_signals_yields_restricted_insufficient():
-    """All endpoints errored non-terminally + robots is None → restricted."""
+def test_verdict_all_endpoints_unreachable_yields_forbidden():
+    """Network failure on robots.txt → complete disallow (RFC 9309 §2.3.1.4)."""
     verdict, reasons = compute_verdict(
         robots=None, ai_txt=None, llms_txt=None, signing_directory=None,
         errors={
@@ -182,6 +184,16 @@ def test_verdict_no_clean_signals_yields_restricted_insufficient():
             "signing_directory": httpx.ConnectError("net"),
         },
         partial=True,
+    )
+    assert verdict == "forbidden"
+    assert any("unreachable" in r for r in reasons)
+
+
+def test_verdict_no_signal_at_all_yields_restricted_insufficient():
+    """Nothing fetched and nothing errored → restricted, insufficient signal."""
+    verdict, reasons = compute_verdict(
+        robots=None, ai_txt=None, llms_txt=None, signing_directory=None,
+        errors={}, partial=False,
     )
     assert verdict == "restricted"
     assert any("insufficient policy signal" in r for r in reasons)

@@ -181,9 +181,11 @@ describe("POST /register/submit (happy + nonce-burn regression)", () => {
     const bodyJson = JSON.stringify(body);
 
     const signer = await signerFromJWK(jwk as unknown as JsonWebKey);
+    const digest = createHash("sha256").update(bodyJson).digest("base64");
     const headers: Record<string, string> = {
       "content-type": "application/json",
       "signature-agent": `"${sigAgent}"`,
+      "content-digest": `sha-256=:${digest}:`,
     };
     const sigHeaders = await signatureHeaders(
       { method: "POST", url: submitUrl, headers },
@@ -191,6 +193,7 @@ describe("POST /register/submit (happy + nonce-burn regression)", () => {
       {
         created: new Date(),
         expires: new Date(Date.now() + 60_000),
+        components: ["@authority", "signature-agent", "content-digest"],
       },
     );
     headers["Signature"] = sigHeaders["Signature"];

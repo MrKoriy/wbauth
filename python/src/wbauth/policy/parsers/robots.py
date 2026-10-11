@@ -2,48 +2,62 @@
 
 D-19: an HTML body served as /robots.txt MUST raise RobotsParseError so
 the verdict engine maps to "forbidden" instead of silently allowing.
+
+Parsing and evaluation are split so the inspector can cache the parsed
+rules once per host (:class:`RobotsSource`) and evaluate them per target
+path and per user-agent — a cached verdict for ``/public`` must never be
+reused for ``/private``.
 """
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from protego import Protego
 
 from ..errors import RobotsParseError
 from ..policy import RobotsResult
 
+DEFAULT_USER_AGENT = "wbauth/0.1"
 
-def parse_robots(
-    text: str,
-    content_type: str | None,
-    target_url: str,
-    user_agent: str = "wbauth/0.1",
-) -> RobotsResult:
-    """Parse robots.txt body and evaluate ``can_fetch(target_url, ua)``.
 
-    Args:
-      text: raw robots.txt response body.
-      content_type: HTTP Content-Type header (may be None / arbitrary case).
-      target_url: the URL the agent intends to fetch (path is what matters).
-      user_agent: UA string to evaluate against (D-20: "wbauth/0.1" in v1).
+@dataclass(frozen=True)
+class RobotsSource:
+    """Parsed robots.txt rules, independent of target path and user-agent."""
 
-    Returns:
-      RobotsResult with can_fetch_url + sitemaps populated.
+    parser: Protego
+    raw: str
 
-    Raises:
-      RobotsParseError: if the body is HTML (content-type advertises HTML
-        OR first non-whitespace byte is ``<``). Pitfall 1 detection.
-    """
-    # Pitfall 1: detect HTML-200-on-robots silently parsed as "no rules → allow".
+
+def parse_robots_source(text: str, content_type: str | None) -> RobotsSource:
+    """Parse robots.txt once. Raises :class:`RobotsParseError` on HTML bodies."""
     sniff = text.lstrip()[:1]
     if sniff == "<" or (content_type and "html" in content_type.lower()):
         raise RobotsParseError(
             "robots.txt response looks like HTML — origin likely returned a "
             "catch-all SPA page; cannot evaluate; assuming disallowed"
         )
+    return RobotsSource(parser=Protego.parse(text), raw=text)
 
-    rp = Protego.parse(text)
+
+def evaluate_robots(
+    source: RobotsSource, target_url: str, user_agent: str = DEFAULT_USER_AGENT
+) -> RobotsResult:
+    """Evaluate cached rules for one ``(target_url, user_agent)`` pair."""
+    rp = source.parser
     return RobotsResult(
         can_fetch_url=rp.can_fetch(target_url, user_agent),
         sitemaps=list(rp.sitemaps),
-        raw=text,
+        raw=source.raw,
         user_agent_evaluated=user_agent,
+        crawl_delay=rp.crawl_delay(user_agent),
     )
+
+
+def parse_robots(
+    text: str,
+    content_type: str | None,
+    target_url: str,
+    user_agent: str = DEFAULT_USER_AGENT,
+) -> RobotsResult:
+    """Parse + evaluate in one step (convenience wrapper)."""
+    return evaluate_robots(parse_robots_source(text, content_type), target_url, user_agent)

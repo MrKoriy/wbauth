@@ -57,6 +57,20 @@ function componentsFor(method: string, hasBody: boolean): string[] {
 	return base;
 }
 
+/** Headers regenerated on every sign() call. */
+const RESIGN_HEADERS = ["signature", "signature-input", "signature-agent"];
+
+function hasHeader(headers: Record<string, string>, name: string): boolean {
+	const n = name.toLowerCase();
+	return Object.keys(headers).some((k) => k.toLowerCase() === n);
+}
+
+function removeHeaders(headers: Record<string, string>, names: string[]): void {
+	for (const k of Object.keys(headers)) {
+		if (names.includes(k.toLowerCase())) delete headers[k];
+	}
+}
+
 // ---------- Public API ----------
 
 /**
@@ -84,24 +98,50 @@ export async function sign(
 		);
 	}
 
-	// 2. Set Signature-Agent header (RFC 8941 string in double quotes).
+	// 2. Validate options up-front (parity with Python signer).
+	const expiresAfterSeconds =
+		opts.expiresAfterSeconds ?? DEFAULT_EXPIRES_SECONDS;
+	if (!Number.isFinite(expiresAfterSeconds) || expiresAfterSeconds <= 0) {
+		throw new RangeError(
+			`expiresAfterSeconds must be a positive number, got: ${expiresAfterSeconds}`,
+		);
+	}
+
+	// 3. Drop stale signature headers in ANY casing. A retried / redirected
+	// request still carries the previous hop's values; leaving them in place
+	// produces merged `sig1=..., sig1=...` headers that every verifier rejects.
+	removeHeaders(request.headers, RESIGN_HEADERS);
+
+	// 4. Set Signature-Agent header (RFC 8941 string in double quotes).
 	// CRITICAL: must be set BEFORE signatureHeaders inspects the message,
 	// otherwise web-bot-auth picks REQUEST_COMPONENTS_WITHOUT_SIGNATURE_AGENT.
 	const signatureAgentHeader = `"${identity.signatureAgentUrl}"`;
 	request.headers["Signature-Agent"] = signatureAgentHeader;
 
-	// 3. Defaults.
+	// 5. Defaults.
 	const created = opts.created ?? new Date();
-	const expiresAfterSeconds =
-		opts.expiresAfterSeconds ?? DEFAULT_EXPIRES_SECONDS;
 	const expires = new Date(created.getTime() + expiresAfterSeconds * 1000);
 	const label = opts.label ?? DEFAULT_LABEL;
 
-	// 4. Components based on body presence.
-	const hasBody = request.body !== null && request.body !== undefined;
+	// 6. Components based on body presence.
+	const hasBody =
+		request.body !== null &&
+		request.body !== undefined &&
+		request.body.byteLength > 0;
 	const components = componentsFor(request.method, hasBody);
+	if (
+		components.includes("content-digest") &&
+		!hasHeader(request.headers, "content-digest")
+	) {
+		// Python raises here too. Signing a missing header would yield a
+		// signature that no verifier can ever validate.
+		throw new Error(
+			'Covered header field "content-digest" not found in the message. ' +
+				"Call ensureContentDigest() or use createSignedFetch()/applyTo(), which add it automatically.",
+		);
+	}
 
-	// 5. Build a Web `Request` for web-bot-auth's `signatureHeaders`.
+	// 7. Build a Web `Request` for web-bot-auth's `signatureHeaders`.
 	const headers = new Headers();
 	for (const [k, v] of Object.entries(request.headers)) headers.set(k, v);
 	const init: RequestInit = { method: request.method, headers };
@@ -110,7 +150,7 @@ export async function sign(
 	if (hasBody) init.body = request.body as unknown as BodyInit;
 	const req = new Request(request.url, init);
 
-	// 6. Delegate to web-bot-auth. The signer is the active key's pre-resolved
+	// 8. Delegate to web-bot-auth. The signer is the active key's pre-resolved
 	// Signer (cached in Identity at construction time).
 	const params: SignatureParams = {
 		created,
@@ -121,7 +161,7 @@ export async function sign(
 	};
 	const result = await signatureHeaders(req, identity._signer(), params);
 
-	// 7. Mutate request.headers (mirror Python signer behavior).
+	// 9. Mutate request.headers (mirror Python signer behavior).
 	request.headers.Signature = result.Signature;
 	request.headers["Signature-Input"] = result["Signature-Input"];
 

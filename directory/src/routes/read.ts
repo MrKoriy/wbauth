@@ -3,7 +3,7 @@
 //   GET /.well-known/http-message-signatures-directory          (root, signed JWKS for the directory's own key)
 //   GET /.well-known/http-message-signatures-directory/{kid}    (signed agent JWKS)
 //   GET /agents/{kid}                                           (full Signature Agent Card, JSON)
-//   GET /agents                                                 (paginated; ?all=true returns up to 10000)
+//   GET /agents                                                 (paginated, 50/page)
 //   GET /static/all.json                                        (full snapshot for nightly Action — Plan 03-02)
 //
 // Cache-Control: `public, max-age=300` on the well-known endpoints — NO `immutable`
@@ -20,9 +20,19 @@ import { Hono } from "hono";
 import { directoryResponseHeaders } from "web-bot-auth";
 
 import type { Env } from "../env";
+import { edgeCached } from "../cache";
 import { getDirectorySigner, getDirectoryPublicJwks } from "../signing";
 
 export const readRouter = new Hono<{ Bindings: Env }>();
+
+const PAGE_SIZE = 50;
+const MAX_PAGE = 10_000;
+
+// Edge-cache every read endpoint (see src/cache.ts).
+readRouter.use("/.well-known/*", edgeCached);
+readRouter.use("/agents", edgeCached);
+readRouter.use("/agents/*", edgeCached);
+readRouter.use("/static/*", edgeCached);
 
 const WELL_KNOWN_CONTENT_TYPE =
   "application/http-message-signatures-directory+json";
@@ -120,19 +130,20 @@ readRouter.get("/agents/:kid", async (c) => {
   return c.json(card);
 });
 
-// Paginated list — 50/page default; ?all=true returns up to 10000 in one page
+// Paginated list — 50/page; use /static/all.json for a full snapshot
 // (intentional escape hatch for the nightly snapshot job — Plan 03-02 prefers
 // /static/all.json but this works as a fallback).
 readRouter.get("/agents", async (c) => {
-  const all = c.req.query("all") === "true";
-  const page = Math.max(1, parseInt(c.req.query("page") ?? "1", 10));
-  const limit = all ? 10000 : 50;
-  const offset = (page - 1) * limit;
+  const rawPage = Number.parseInt(c.req.query("page") ?? "1", 10);
+  const page = Number.isFinite(rawPage)
+    ? Math.min(MAX_PAGE, Math.max(1, rawPage))
+    : 1;
+  const offset = (page - 1) * PAGE_SIZE;
   const { results } = await c.env.DB.prepare(
     `SELECT kid, client_name, signature_agent_url, created_at
      FROM agents ORDER BY created_at DESC LIMIT ? OFFSET ?`,
   )
-    .bind(limit, offset)
+    .bind(PAGE_SIZE, offset)
     .all();
   c.header("cache-control", "public, max-age=300");
   return c.json({ page, count: results.length, agents: results });

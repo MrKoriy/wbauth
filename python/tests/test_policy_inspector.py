@@ -133,21 +133,20 @@ async def test_cache_hit_avoids_second_fetch(httpx_mock):
         text="User-agent: *\nAllow: /",
         headers={"content-type": "text/plain"},
     )
-    # 404 endpoints — errors are NOT cached, so they may be re-fetched.
-    # Register multiple times to allow the second inspect() call to re-hit them.
-    for _ in range(2):
-        _add_404_for(httpx_mock, "https://example.com/ai.txt")
-        _add_404_for(httpx_mock, "https://example.com/llms.txt")
-        _add_404_for(
-            httpx_mock,
-            "https://example.com/.well-known/http-message-signatures-directory",
-        )
+    # 404 endpoints are negatively cached, so each is fetched exactly once.
+    _add_404_for(httpx_mock, "https://example.com/ai.txt")
+    _add_404_for(httpx_mock, "https://example.com/llms.txt")
+    _add_404_for(
+        httpx_mock,
+        "https://example.com/.well-known/http-message-signatures-directory",
+    )
 
     await inspect("https://example.com/")
     await inspect("https://example.com/")
     robots_calls = sum(
         1 for r in httpx_mock.get_requests() if r.url.path == "/robots.txt"
     )
+    assert len(httpx_mock.get_requests()) == 4
     assert robots_calls == 1, f"robots.txt re-fetched: {robots_calls} calls"
 
 

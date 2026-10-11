@@ -16,7 +16,6 @@ and accepts proof-of-key-ownership registrations (D-38).
 | GET    | `/.well-known/http-message-signatures-directory/{kid}`      | Agent JWKS, signed by the directory's key.                               |
 | GET    | `/agents/{kid}`                                             | Full Signature Agent Card (unsigned JSON, `max-age=60`).                 |
 | GET    | `/agents?page=N`                                            | Paginated list (50/page).                                                |
-| GET    | `/agents?all=true`                                          | Full list (up to 10000) — fallback for snapshot consumers.               |
 | GET    | `/static/all.json`                                          | Full snapshot — Plan 03-02's nightly Action consumes this.               |
 | GET    | `/healthz`                                                  | `{ok:true}`. Good for uptime checks.                                    |
 
@@ -28,13 +27,16 @@ directory/
 ├── migrations/
 │   ├── 0001_create_agents.sql              # D-36 schema
 │   ├── 0002_create_registration_challenges.sql
-│   └── 0003_create_ratelimit.sql
+│   ├── 0003_create_ratelimit.sql
+│   └── 0004_challenges_keyed_by_nonce.sql
 ├── src/
 │   ├── index.ts                 # Hono entry; mounts routers + onError
 │   ├── env.ts                   # Bindings type
 │   ├── blocklist.ts             # D-43 reserved-name guard
 │   ├── ratelimit.ts             # D-40+D-48 D1 small-row strategy
 │   ├── signing.ts               # Lazy directory signer init
+│   ├── cache.ts                 # Edge cache (Cache API) for read endpoints
+│   ├── crypto.ts                # RFC 7638 thumbprint, Content-Digest helpers
 │   ├── schemas.ts               # zod schemas for register bodies
 │   └── routes/
 │       ├── register.ts          # /register/challenge + /register/submit
@@ -43,7 +45,8 @@ directory/
     ├── handlers.test.ts         # End-to-end handler tests via SELF.fetch
     ├── blocklist.test.ts        # Includes 'googlestyle-app' false-positive guard
     ├── ratelimit.test.ts        # 11th call → 429; cleanup-on-write
-    └── verify.test.ts           # web-bot-auth happy + tampered-sig rejection
+    ├── verify.test.ts           # web-bot-auth happy + tampered-sig rejection
+    └── audit.test.ts            # Registration security regressions (2026-10 audit)
 ```
 
 ## Secrets
@@ -118,3 +121,28 @@ npm run -w directory migrate:remote
   leak stack traces to clients; details go to `wrangler tail`).
 - Nonce DELETE happens BEFORE the 201 response (T-03-02 replay regression
   guard — tested in `handlers.test.ts`).
+
+## Registration security (2026-10 audit)
+
+`POST /register/submit` accepts a registration only if **all** hold:
+
+1. every submitted key's `kid` equals its RFC 7638 thumbprint (prevents
+   registering an attacker key under a victim's kid);
+2. the Signature-Input `keyid` equals `body.kid` and the RFC 9421 signature
+   verifies with that key;
+3. the signature covers `content-digest`, and `Content-Digest` matches the
+   raw body (binds `kid`, `challenge`, `keys` to the signature);
+4. the `Signature-Agent` header equals `body.signature_agent_url`;
+5. the challenge (keyed by nonce, issued for this kid, ≤5 min old) is
+   consumed exactly once.
+
+`wbauth register` (Python CLI) already signs this way. Apply migration
+`0004` before deploying (`npm run -w directory migrate:remote`).
+
+## Edge cache
+
+Read endpoints are cached for 60 s with the Cache API (signatures are minted
+with a 300 s lifetime). Re-registration purges the agent's cached entries.
+The Cache API is a no-op on `*.workers.dev` — attach a custom domain to
+benefit in production. `GET /agents` is fixed at 50 rows/page; use
+`/static/all.json` for a full snapshot.

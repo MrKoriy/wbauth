@@ -86,7 +86,7 @@ underlying Playwright page (raw `stagehand.context.pages()[0]`).
 
 **Install:**
 ```bash
-npm install @browserbasehq/stagehand wbauth
+npm install @browserbasehq/stagehand wb-auth
 npx playwright install chromium  # Stagehand LOCAL still needs the Chromium binary
 ```
 
@@ -112,7 +112,7 @@ registration.
 
 **Local-dev tip:** if you're hacking on the wbauth TS SDK in this
 monorepo, `cd typescript && npm link` then `cd examples && npm link
-wbauth` so the demo picks up your local build.
+wb-auth` so the demo picks up your local build.
 
 ---
 
