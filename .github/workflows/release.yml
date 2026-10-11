@@ -43,7 +43,7 @@ jobs:
           uv sync --locked --all-extras --dev --all-packages
           uv run pytest python/tests -q
       - name: Build distribution packages
-        run: uv build --package wbauth --out-dir python/dist
+        run: uv build --package wbauth-sdk --out-dir python/dist
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
