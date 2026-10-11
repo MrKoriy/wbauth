@@ -21,7 +21,7 @@ class RobotsResult:
     can_fetch_url: bool
     sitemaps: list[str]
     raw: str
-    user_agent_evaluated: str  # the agent's UA (defaults to "wbauth/0.1")
+    user_agent_evaluated: str  # the agent's UA (defaults to "wbauth/<version>")
     crawl_delay: float | None = None  # Crawl-delay for this UA, if any
 
 

@@ -18,6 +18,13 @@ and accepts proof-of-key-ownership registrations (D-38).
 | GET    | `/agents?page=N`                                            | Paginated list (50/page).                                                |
 | GET    | `/static/all.json`                                          | Full snapshot — Plan 03-02's nightly Action consumes this.               |
 | GET    | `/healthz`                                                  | `{ok:true}`. Good for uptime checks.                                    |
+| GET    | `/`                                                         | Searchable HTML list (`?q=`), verified agents first.                     |
+| GET    | `/badge/{kid}.svg`                                          | README badge: `verified` / `registered` / `unknown`.                     |
+
+Every agent record carries `domain_verified` (+ `domain_verified_at`): `true`
+only when `signature_agent_url` is this directory's hosted JWKS for the kid,
+or serves a JWKS containing the registered Ed25519 key. Requires migration
+`0005_domain_verification.sql`.
 
 ## Layout
 
@@ -28,7 +35,8 @@ directory/
 │   ├── 0001_create_agents.sql              # D-36 schema
 │   ├── 0002_create_registration_challenges.sql
 │   ├── 0003_create_ratelimit.sql
-│   └── 0004_challenges_keyed_by_nonce.sql
+│   ├── 0004_challenges_keyed_by_nonce.sql
+│   └── 0005_domain_verification.sql
 ├── src/
 │   ├── index.ts                 # Hono entry; mounts routers + onError
 │   ├── env.ts                   # Bindings type

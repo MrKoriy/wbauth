@@ -24,9 +24,9 @@ from wbauth import cli as cli_module
 
 
 def _run_keygen(*args: str, cwd: str | None = None) -> subprocess.CompletedProcess:
-    """Spawn `uv run wbauth keygen <args>` and capture its output."""
+    """Spawn ``python -m wbauth.cli keygen <args>`` (no dependency on uv)."""
     return subprocess.run(
-        ["uv", "run", "wbauth", "keygen", *args],
+        [sys.executable, "-m", "wbauth.cli", "keygen", *args],
         capture_output=True,
         text=True,
         cwd=cwd,

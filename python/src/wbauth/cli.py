@@ -32,6 +32,7 @@ import argparse
 import asyncio
 import dataclasses
 import json
+import os
 import sys
 
 from .identity import DEFAULT_KEY_PATH, Identity
@@ -113,12 +114,26 @@ def _build_parser() -> argparse.ArgumentParser:
     insp.add_argument(
         "--json",
         action="store_true",
-        help="Emit the full SitePolicy as JSON to stdout (machine-readable).",
+        help="Emit the full SitePolicy as JSON to stdout (alias of --format json).",
+    )
+    insp.add_argument(
+        "--format",
+        choices=("text", "table", "json"),
+        default=None,
+        help="Output format: text (default), table (per-source breakdown, "
+        "colored on a TTY; honours NO_COLOR), or json.",
+    )
+    insp.add_argument(
+        "--cache",
+        metavar="PATH",
+        default=None,
+        help="Persist the policy cache in this JSON file between runs "
+        "(skips re-downloading fresh policy files).",
     )
     insp.add_argument(
         "--user-agent",
         default=None,
-        help="Evaluate robots.txt for this User-Agent (default: wbauth/0.1).",
+        help="Evaluate robots.txt for this User-Agent (default: wbauth/<version>).",
     )
 
     # ---- verify (Phase 2, CLI-03) ------------------------------------------
@@ -285,6 +300,74 @@ def _print_human_summary(policy: SitePolicy) -> None:
     print("(For full SitePolicy JSON, re-run with --json)")
 
 
+_VERDICT_COLORS = {"allowed": "32", "restricted": "33", "forbidden": "31"}
+
+
+def _use_color() -> bool:
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _paint(text: str, code: str, color: bool) -> str:
+    return f"\033[{code}m{text}\033[0m" if color else text
+
+
+def _source_rows(policy: SitePolicy) -> list[tuple[str, str, str]]:
+    """(source, status, detail) for each of the four policy endpoints."""
+    rows: list[tuple[str, str, str]] = []
+    labels = {
+        "robots": "robots.txt", "ai_txt": "ai.txt", "llms_txt": "llms.txt",
+        "signing_directory": "signing directory",
+    }
+    for key, label in labels.items():
+        exc = policy.errors.get(key)
+        value = getattr(policy, key)
+        if exc is not None:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if isinstance(status_code, int) and 400 <= status_code < 500 and status_code != 429:
+                rows.append((label, "absent", f"HTTP {status_code}"))
+            else:
+                first = str(exc).splitlines()[0] if str(exc) else ""
+                rows.append((label, "error", f"{type(exc).__name__}: {first}"[:70]))
+        elif value is None:
+            rows.append((label, "-", ""))
+        elif key == "robots":
+            detail = "allows this path" if value.can_fetch_url else "DISALLOWS this path"
+            if value.crawl_delay:
+                detail += f", crawl-delay {value.crawl_delay:g}s"
+            rows.append((label, "found", detail))
+        elif key == "ai_txt":
+            rows.append((label, "found", f"{len(value.restrictions)} restriction(s), "
+                                         f"{len(value.permissions)} permission(s)"))
+        elif key == "llms_txt":
+            rows.append((label, "found", value.title or "(untitled)"))
+        else:
+            rows.append((label, "found" if value.present else "invalid",
+                         f"{len(value.keys)} key(s)"))
+    return rows
+
+
+def _print_table(policy: SitePolicy) -> None:
+    color = _use_color()
+    verdict = _paint(policy.verdict.upper(), _VERDICT_COLORS.get(policy.verdict, "0") + ";1",
+                     color)
+    print(f"{verdict}  {policy.url}")
+    print()
+    rows = _source_rows(policy)
+    w1 = max(len(r[0]) for r in rows)
+    w2 = max(len(r[1]) for r in rows)
+    status_colors = {"found": "32", "absent": "2", "error": "31", "invalid": "33"}
+    print(f"{'SOURCE'.ljust(w1)}  {'STATUS'.ljust(w2)}  DETAIL")
+    for src, st, detail in rows:
+        st_out = _paint(st.ljust(w2), status_colors.get(st, "0"), color)
+        print(f"{src.ljust(w1)}  {st_out}  {detail}")
+    print()
+    print("Why:")
+    for reason in policy.reasons:
+        print(f"  - {reason}")
+    if policy.partial:
+        print(_paint("  (partial: some sources failed; strict policy applied)", "33", color))
+
+
 def _dispatch_inspect(args: argparse.Namespace) -> int:
     """CLI-02 + D-24 handler.
 
@@ -294,6 +377,12 @@ def _dispatch_inspect(args: argparse.Namespace) -> int:
     (CLI-06: errors never leak to stdout, even in --json mode, so JSON
     consumers always see a clean parseable document or an empty stdout).
     """
+    fmt = getattr(args, "format", None) or ("json" if args.json else "text")
+    cache_path = getattr(args, "cache", None)
+    if cache_path:
+        from .policy import load_cache
+
+        load_cache(os.path.expanduser(cache_path))
     try:
         policy: SitePolicy = asyncio.run(
             inspect(args.url, user_agent=args.user_agent)
@@ -307,9 +396,20 @@ def _dispatch_inspect(args: argparse.Namespace) -> int:
         # isolation (network pool exhaustion, asyncio runtime errors, etc.).
         print(f"error: {type(e).__name__}: {e}", file=sys.stderr)
         return 3
-    if args.json:
+    if cache_path:
+        from .policy import save_cache
+
+        try:
+            path = os.path.expanduser(cache_path)
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            save_cache(path)
+        except OSError as e:
+            print(f"warning: could not write cache {cache_path}: {e}", file=sys.stderr)
+    if fmt == "json":
         # default=str handles the datetime field (fetched_at).
         print(json.dumps(_serialize_policy(policy), default=str))
+    elif fmt == "table":
+        _print_table(policy)
     else:
         _print_human_summary(policy)
     return {"allowed": 0, "restricted": 1, "forbidden": 2}.get(policy.verdict, 3)

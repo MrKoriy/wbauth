@@ -4,6 +4,10 @@ Phase 1 (current): identity + signer + JWKS + CLI keygen.
 Phase 2: HTTP-client adapters + policy inspector.
 """
 from .adapters import (
+    AsyncSigningTransport,
+    SigningTransport,
+    signed_async_client,
+    signed_client,
     WebBotAuth,
     WebBotAuthAdapter,
     WebBotAuthTransport,
@@ -22,9 +26,13 @@ from .policy import (
 )
 from .signer import SignatureHeaders, sign
 
-__version__ = "0.2.0"
+from ._version import __version__
 
 __all__ = [
+    "AsyncSigningTransport",
+    "SigningTransport",
+    "signed_async_client",
+    "signed_client",
     "AiTxtResult",
     "Identity",
     "KeyPair",

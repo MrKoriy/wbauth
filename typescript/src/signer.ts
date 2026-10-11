@@ -23,7 +23,8 @@ const DEFAULT_LABEL = "sig1";
 /** Default expires window. 60s leaves NTP-skew + network-latency headroom. */
 const DEFAULT_EXPIRES_SECONDS = 60;
 /** Methods that may carry a body and therefore want content-digest covered. */
-const DIGEST_METHODS = new Set(["POST", "PUT", "PATCH"]);
+/** Hard upper bound on the validity window (parity with Python). */
+export const MAX_EXPIRES_SECONDS = 3600;
 // WEB_BOT_AUTH_TAG is enforced internally by web-bot-auth's signatureHeaders;
 // we keep the constant for greppability of the profile invariant.
 void WEB_BOT_AUTH_TAG;
@@ -49,9 +50,9 @@ export interface SignOptions {
 
 // ---------- Components selector (mirror Python `_components_for`) ----------
 
-function componentsFor(method: string, hasBody: boolean): string[] {
+function componentsFor(_method: string, hasBody: boolean): string[] {
 	const base = ["@authority", "signature-agent"];
-	if (hasBody && DIGEST_METHODS.has(method.toUpperCase())) {
+	if (hasBody) {
 		base.push("content-digest");
 	}
 	return base;
@@ -101,9 +102,14 @@ export async function sign(
 	// 2. Validate options up-front (parity with Python signer).
 	const expiresAfterSeconds =
 		opts.expiresAfterSeconds ?? DEFAULT_EXPIRES_SECONDS;
-	if (!Number.isFinite(expiresAfterSeconds) || expiresAfterSeconds <= 0) {
+	if (
+		typeof expiresAfterSeconds !== "number" ||
+		!Number.isFinite(expiresAfterSeconds) ||
+		expiresAfterSeconds <= 0 ||
+		expiresAfterSeconds > MAX_EXPIRES_SECONDS
+	) {
 		throw new RangeError(
-			`expiresAfterSeconds must be a positive number, got: ${expiresAfterSeconds}`,
+			`expiresAfterSeconds must be a number in (0, ${MAX_EXPIRES_SECONDS}], got: ${expiresAfterSeconds}`,
 		);
 	}
 
@@ -147,7 +153,12 @@ export async function sign(
 	const init: RequestInit = { method: request.method, headers };
 	// Cast: Uint8Array is a valid BodyInit at runtime (web fetch spec) but DOM
 	// typing wants ArrayBufferView/string/Blob etc. The cast is safe.
-	if (hasBody) init.body = request.body as unknown as BodyInit;
+	// GET/HEAD cannot carry a body in a WHATWG Request; the body itself is not
+	// part of the signature base (content-digest is), so it is safe to omit.
+	const m = request.method.toUpperCase();
+	if (hasBody && m !== "GET" && m !== "HEAD") {
+		init.body = request.body as unknown as BodyInit;
+	}
 	const req = new Request(request.url, init);
 
 	// 8. Delegate to web-bot-auth. The signer is the active key's pre-resolved

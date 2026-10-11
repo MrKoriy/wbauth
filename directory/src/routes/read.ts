@@ -115,7 +115,7 @@ readRouter.get("/agents/:kid", async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT kid, client_name, client_uri, signature_agent_url, expected_user_agent,
             contacts, purpose, targeted_content, rate_control, keys,
-            created_at, last_updated
+            created_at, last_updated, domain_verified, domain_verified_at
      FROM agents WHERE kid = ?`,
   )
     .bind(kid)
@@ -123,6 +123,7 @@ readRouter.get("/agents/:kid", async (c) => {
   if (!row) return c.json({ error: "not_found" }, 404);
   const card = {
     ...row,
+    domain_verified: Boolean((row as { domain_verified?: number }).domain_verified),
     contacts: JSON.parse((row as { contacts?: string }).contacts ?? "[]"),
     keys: JSON.parse((row as { keys: string }).keys),
   };
@@ -140,11 +141,14 @@ readRouter.get("/agents", async (c) => {
     : 1;
   const offset = (page - 1) * PAGE_SIZE;
   const { results } = await c.env.DB.prepare(
-    `SELECT kid, client_name, signature_agent_url, created_at
+    `SELECT kid, client_name, signature_agent_url, created_at, domain_verified
      FROM agents ORDER BY created_at DESC LIMIT ? OFFSET ?`,
   )
     .bind(PAGE_SIZE, offset)
     .all();
+  for (const r of results as { domain_verified?: number | boolean }[]) {
+    r.domain_verified = Boolean(r.domain_verified);
+  }
   c.header("cache-control", "public, max-age=300");
   return c.json({ page, count: results.length, agents: results });
 });
@@ -154,13 +158,14 @@ readRouter.get("/static/all.json", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT kid, client_name, client_uri, signature_agent_url, expected_user_agent,
             contacts, purpose, targeted_content, rate_control, keys,
-            created_at, last_updated
+            created_at, last_updated, domain_verified, domain_verified_at
      FROM agents ORDER BY created_at DESC LIMIT 10000`,
   ).all();
   const agents = results.map((row) => {
     const r = row as { contacts?: string; keys: string } & Record<string, unknown>;
     return {
       ...r,
+      domain_verified: Boolean(r.domain_verified),
       contacts: JSON.parse(r.contacts ?? "[]"),
       keys: JSON.parse(r.keys),
     };

@@ -1,7 +1,7 @@
 """Shared adapter helpers (internal — not part of the public surface).
 
 The signer auto-includes ``content-digest`` in covered components for
-POST/PUT/PATCH with a body; adapters call :func:`ensure_content_digest`
+any request with a body; adapters call :func:`ensure_content_digest`
 before ``sign()`` so that precondition is met. RFC 9530 sha-256 in
 structured-fields form (``sha-256=:<b64>:``).
 """
@@ -12,7 +12,6 @@ import hashlib
 import re
 from collections.abc import Iterable, MutableMapping
 
-_DIGEST_METHODS = ("POST", "PUT", "PATCH")
 
 # Default UAs set by HTTP libraries. An Identity UA replaces these, but an
 # explicit caller-supplied UA always wins.
@@ -20,14 +19,12 @@ _LIBRARY_DEFAULT_UA = re.compile(r"^(python-requests|python-httpx|python-urllib)
 
 
 def ensure_content_digest(method: str, headers: dict, body: bytes | None) -> None:
-    """Add ``Content-Digest`` for POST/PUT/PATCH with a non-empty body.
+    """Add ``Content-Digest`` for any request with a non-empty body.
 
-    No-op when the body is empty, the method carries no body, or the caller
+    No-op when the body is empty or the caller
     already supplied a Content-Digest (case-insensitive).
     """
     if not body:
-        return
-    if method.upper() not in _DIGEST_METHODS:
         return
     if any(k.lower() == "content-digest" for k in headers):
         return

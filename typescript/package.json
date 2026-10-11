@@ -1,7 +1,7 @@
 {
 	"name": "wb-auth",
-	"version": "0.2.0",
-	"description": "Web Bot Auth (RFC 9421) TypeScript SDK \u2014 signed identity for AI agents and crawlers",
+	"version": "0.3.0",
+	"description": "Web Bot Auth (RFC 9421) TypeScript SDK — signed identity for AI agents and crawlers",
 	"type": "module",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.js",
@@ -63,6 +63,7 @@
 		"@types/node": "^20",
 		"playwright": "^1.59",
 		"tsup": "^8",
+		"tsx": "^4.23.15",
 		"typescript": "^6",
 		"vitest": "^4"
 	},

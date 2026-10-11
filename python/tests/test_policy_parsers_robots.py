@@ -13,6 +13,7 @@ import pytest
 
 from wbauth.policy.errors import RobotsParseError
 from wbauth.policy.parsers import parse_robots
+from wbauth.policy.parsers.robots import DEFAULT_USER_AGENT
 
 FIX = pathlib.Path(__file__).parent / "fixtures" / "policy" / "robots"
 
@@ -25,7 +26,7 @@ def test_robots_allow_yields_can_fetch_true():
     )
     assert r.can_fetch_url is True
     assert "https://example.com/sitemap.xml" in r.sitemaps
-    assert r.user_agent_evaluated == "wbauth/0.1"
+    assert r.user_agent_evaluated == DEFAULT_USER_AGENT
 
 
 def test_robots_disallow_blocks_api_path():

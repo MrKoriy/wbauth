@@ -14,10 +14,11 @@ from dataclasses import dataclass
 
 from protego import Protego
 
+from ..._version import __version__
 from ..errors import RobotsParseError
 from ..policy import RobotsResult
 
-DEFAULT_USER_AGENT = "wbauth/0.1"
+DEFAULT_USER_AGENT = f"wbauth/{__version__}"
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,8 @@ class RobotsSource:
 
 def parse_robots_source(text: str, content_type: str | None) -> RobotsSource:
     """Parse robots.txt once. Raises :class:`RobotsParseError` on HTML bodies."""
+    # RFC 9309 §2.2: a leading UTF-8 BOM must not hide the first group.
+    text = text.lstrip("\ufeff")
     sniff = text.lstrip()[:1]
     if sniff == "<" or (content_type and "html" in content_type.lower()):
         raise RobotsParseError(

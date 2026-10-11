@@ -43,6 +43,31 @@ _LLMS_RESTRICTIVE_RE = re.compile(
 )
 
 
+# A path token inside a free-text ai.txt rule: "/admin/", "/api/*". Not part of
+# a URL ("https://x/y"), a ratio ("AI/ML") or a protocol-relative "//host".
+_PATH_TOKEN_RE = re.compile(r"(?<![\w./:])/(?!/)[^\s,;()\"']*")
+
+
+def _restriction_paths(rule: str) -> list[str]:
+    return [m.group(0).rstrip(".*") or "/" for m in _PATH_TOKEN_RE.finditer(rule)]
+
+
+def restriction_applies(rule: str, target_path: str | None) -> bool:
+    """Does a free-text ai.txt restriction apply to ``target_path``?
+
+    Rules that name no path are site-wide. Rules that name paths apply only
+    when the target path falls under one of them. ``target_path=None`` keeps
+    the legacy behaviour (every restriction applies).
+    """
+    if target_path is None:
+        return True
+    paths = _restriction_paths(rule)
+    if not paths:
+        return True
+    target = target_path or "/"
+    return any(target.startswith(p) for p in paths)
+
+
 def is_unavailable_status(status: int) -> bool:
     """RFC 9309 §2.3.1.3: 4xx (except 429 Too Many Requests) = "unavailable".
 
@@ -59,6 +84,7 @@ def compute_verdict(
     signing_directory: SigningDirectoryResult | None,
     errors: dict[str, Exception],
     partial: bool,
+    target_path: str | None = None,
 ) -> tuple[Literal["allowed", "restricted", "forbidden"], list[str]]:
     """Compute strict verdict from parsed Result objects + per-endpoint errors.
 
@@ -124,11 +150,20 @@ def compute_verdict(
         )
 
     # --- ai.txt branches (rule rows 7-10) -----------------------------
-    if ai_txt is not None and ai_txt.restrictions:
-        first = ai_txt.restrictions[0]
+    applicable = (
+        [r for r in ai_txt.restrictions if restriction_applies(r, target_path)]
+        if ai_txt is not None
+        else []
+    )
+    if applicable:
+        first = applicable[0]
         snippet = first[:60] + ("..." if len(first) > 60 else "")
         restricted_signals.append(
-            f"ai.txt restrictions present: {snippet} ({len(ai_txt.restrictions)} total)"
+            f"ai.txt restrictions present: {snippet} ({len(applicable)} total)"
+        )
+    elif ai_txt is not None and ai_txt.restrictions:
+        reasons.append(
+            f"ai.txt has {len(ai_txt.restrictions)} restriction(s), none scoped to this path"
         )
     elif ai_txt is not None and ai_txt.permissions:
         reasons.append("ai.txt permissions present, no restrictions")

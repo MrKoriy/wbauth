@@ -68,6 +68,18 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
+          // No real network from tests. `https://jwks.test/<x>` serves a JWKS
+          // containing the Ed25519 key `x`, so domain-verification can be
+          // exercised end-to-end; everything else is a 502.
+          outboundService: (request: Request) => {
+            const u = new URL(request.url);
+            if (u.hostname === "jwks.test") {
+              return Response.json({
+                keys: [{ kty: "OKP", crv: "Ed25519", x: u.pathname.slice(1) }],
+              });
+            }
+            return new Response("no network in tests", { status: 502 });
+          },
           bindings: {
             DIRECTORY_PRIVATE_JWK: TEST_DIRECTORY_JWK,
             // Inject migrations as a JSON-serializable binding so the worker

@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import type { Env } from "./env";
 import { readRouter } from "./routes/read";
 import { registerRouter } from "./routes/register";
+import { uiRouter } from "./routes/ui";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -16,6 +17,9 @@ app.get("/healthz", (c) => c.json({ ok: true }));
 
 // Read endpoints — long cache, no auth.
 app.route("/", readRouter);
+
+// Human-facing list page + README badges.
+app.route("/", uiRouter);
 
 // Registration — POST only, rate-limited inside the router (D-40).
 app.route("/register", registerRouter);

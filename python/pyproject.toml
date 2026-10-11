@@ -1,6 +1,6 @@
 [project]
 name = "wbauth-sdk"
-version = "0.2.0"
+version = "0.3.0"
 description = "Web Bot Auth (RFC 9421) Python SDK — agent identity for the agentic web"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,6 +42,7 @@ dev = [
     "pyright==1.1.409",
     "pytest-httpx",
     "responses",
+    "hypothesis>=6.100",
 ]
 
 # Pyright config lives in `python/pyrightconfig.json` — pyright auto-discovers

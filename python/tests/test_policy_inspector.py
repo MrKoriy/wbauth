@@ -17,6 +17,7 @@ import pytest
 
 from wbauth.policy import inspect
 from wbauth.policy.inspector import _reset_cache_for_tests
+from wbauth.policy.parsers.robots import DEFAULT_USER_AGENT
 
 FIX = pathlib.Path(__file__).parent / "fixtures" / "policy"
 
@@ -178,8 +179,8 @@ async def test_inspect_raises_on_url_without_host(httpx_mock):
         await inspect("not-a-url")
 
 
-async def test_user_agent_is_wbauth_0_1(httpx_mock):
-    """D-20: every fetch uses User-Agent: wbauth/0.1."""
+async def test_user_agent_is_default_wbauth_ua(httpx_mock):
+    """D-20: every fetch uses the default wbauth/<version> User-Agent."""
     httpx_mock.add_response(
         url="https://example.com/robots.txt",
         text="User-agent: *\nAllow: /",
@@ -193,7 +194,7 @@ async def test_user_agent_is_wbauth_0_1(httpx_mock):
     )
     await inspect("https://example.com/")
     for req in httpx_mock.get_requests():
-        assert req.headers.get("user-agent") == "wbauth/0.1"
+        assert req.headers.get("user-agent") == DEFAULT_USER_AGENT
 
 
 async def test_public_surface_re_exports():

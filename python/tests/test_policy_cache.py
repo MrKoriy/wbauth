@@ -1,7 +1,7 @@
 """Tests for wbauth.policy.cache.PolicyCache.
 
 Per-host LRU cache (cachetools.TTLCache buckets per endpoint) honoring
-origin Cache-Control: no-store/no-cache/private/max-age=0 by skipping
+origin Cache-Control: no-store/no-cache/max-age=0 by skipping
 the cache (D-22, Pitfall 5).
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from wbauth.policy.cache import PolicyCache, _parse_cache_control
     ("", True, None),
     ("no-store", False, None),
     ("no-cache", False, None),
-    ("private", False, None),
+    ("private", True, None),  # client-side cache: private is cacheable
     ("public, no-store", False, None),
     ("public, max-age=300", True, 300),
     ("max-age=0", True, 0),
@@ -55,10 +55,11 @@ def test_cache_no_cache_skips():
     assert cache.get("example.com", "robots") is None
 
 
-def test_cache_private_skips():
+def test_cache_private_is_cacheable_client_side():
+    # RFC 9111 §5.2.2.7: "private" only forbids *shared* caches.
     cache = PolicyCache()
     cache.set("example.com", "robots", "v", cache_control="private, max-age=300")
-    assert cache.get("example.com", "robots") is None
+    assert cache.get("example.com", "robots") is not None
 
 
 def test_cache_max_age_zero_skips():

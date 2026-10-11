@@ -28,6 +28,7 @@ import {
   safeEqual,
   sha256B64,
 } from "../crypto";
+import { verifyDomainOwnership } from "../domain";
 import { checkAndIncrementRateLimit } from "../ratelimit";
 import { ChallengeBody, SubmitBody } from "../schemas";
 
@@ -55,7 +56,11 @@ registerRouter.post(
   sValidator("json", ChallengeBody),
   async (c) => {
     const { kid } = c.req.valid("json");
-    const allowed = await checkAndIncrementRateLimit(c.env.DB, clientIp(c));
+    const allowed = await checkAndIncrementRateLimit(
+      c.env.DB,
+      clientIp(c),
+      "challenge",
+    );
     if (!allowed) {
       return c.json({ error: "rate_limited", retry_after_seconds: 3600 }, 429);
     }
@@ -87,7 +92,11 @@ registerRouter.post(
   sValidator("json", SubmitBody),
   async (c) => {
     const body = c.req.valid("json");
-    const allowed = await checkAndIncrementRateLimit(c.env.DB, clientIp(c));
+    const allowed = await checkAndIncrementRateLimit(
+      c.env.DB,
+      clientIp(c),
+      "submit",
+    );
     if (!allowed) return c.json({ error: "rate_limited" }, 429);
 
     const blocked = isReservedName(body.client_name);
@@ -162,12 +171,20 @@ registerRouter.post(
       .first<{ nonce: string }>();
     if (!consumed) return c.json({ error: "challenge_already_used" }, 409);
 
+    const origin = new URL(c.req.url).origin;
+    const domain = await verifyDomainOwnership(
+      body.signature_agent_url,
+      body.kid,
+      jwk.x,
+      origin,
+    );
+
     await c.env.DB.prepare(
       `INSERT INTO agents (
          kid, client_name, client_uri, signature_agent_url, expected_user_agent,
          contacts, purpose, targeted_content, rate_control, keys,
-         created_at, last_updated
-       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)
+         created_at, last_updated, domain_verified, domain_verified_at
+       ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13)
        ON CONFLICT(kid) DO UPDATE SET
          client_name         = ?2,
          client_uri          = ?3,
@@ -178,7 +195,9 @@ registerRouter.post(
          targeted_content    = ?8,
          rate_control        = ?9,
          keys                = ?10,
-         last_updated        = ?11`,
+         last_updated        = ?11,
+         domain_verified     = ?12,
+         domain_verified_at  = ?13`,
     )
       .bind(
         body.kid,
@@ -192,6 +211,8 @@ registerRouter.post(
         body.rate_control ?? null,
         JSON.stringify(body.keys),
         now,
+        domain.verified ? 1 : 0,
+        domain.verified ? now : null,
       )
       .run();
 
@@ -200,10 +221,17 @@ registerRouter.post(
       .bind(body.kid)
       .run();
 
-    const origin = new URL(c.req.url).origin;
     c.executionCtx.waitUntil(purgeAgentCache(origin, body.kid));
 
     const directoryUrl = `${origin}/.well-known/http-message-signatures-directory/${body.kid}`;
-    return c.json({ kid: body.kid, directory_url: directoryUrl }, 201);
+    return c.json(
+      {
+        kid: body.kid,
+        directory_url: directoryUrl,
+        domain_verified: domain.verified,
+        domain_verification: domain.reason,
+      },
+      201,
+    );
   },
 );

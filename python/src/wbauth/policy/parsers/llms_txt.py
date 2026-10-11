@@ -34,6 +34,7 @@ def parse_llms_txt(text: str) -> LlmsTxtResult:
     if len(text) > _MAX_BYTES:
         raise FetchError(f"llms.txt body exceeds 1 MB cap ({len(text)} bytes)")
 
+    text = text.lstrip("\ufeff")
     title = ""
     description = ""
     sections: list[LlmsTxtSection] = []

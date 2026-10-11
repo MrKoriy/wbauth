@@ -23,4 +23,4 @@ export type { NormalizedRequest } from "./normalized-request.js";
 export type { SignatureHeaders, SignOptions } from "./signer.js";
 export { sign } from "./signer.js";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";

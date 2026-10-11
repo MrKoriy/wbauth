@@ -162,14 +162,18 @@ def test_httpx_redirect_is_resigned_for_new_authority(identity):
             return httpx.Response(302, headers={"location": "https://b.example.com/x"})
         return httpx.Response(200)
 
-    with httpx.Client(transport=httpx.MockTransport(handler), auth=WebBotAuth(identity),
-                      follow_redirects=True) as c:
+    from wbauth.adapters import signed_client
+
+    with signed_client(identity, transport=httpx.MockTransport(handler),
+                       follow_redirects=True) as c:
         c.get("https://a.example.com/")
     assert len(hops) == 2
     for h in hops:
         assert h.headers["signature-input"].count("sig1=") == 1
         assert h.headers["signature"].count("sig1=") == 1
         assert h.headers["signature-agent"] == f'"{SIG_AGENT_URL}"'
+    # Fresh signature per hop (different @authority → different signature).
+    assert hops[0].headers["signature"] != hops[1].headers["signature"]
 
 
 def test_httpx_post_digest_matches_body(identity):
