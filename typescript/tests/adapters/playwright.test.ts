@@ -109,9 +109,9 @@ describe("applyTo", () => {
 	});
 
 	it("UA injection only when caller did NOT set one", async () => {
-		const id = await Identity.fromTestKey("https://example.com/agent.json");
-		// Backdoor: userAgent is `readonly` on the type but assignable here for testing.
-		(id as unknown as { userAgent: string }).userAgent = "wbauth-test/1.0";
+		const id = await Identity.fromTestKey("https://example.com/agent.json", {
+			userAgent: "wbauth-test/1.0",
+		});
 		const { page, invoke } = fakePage();
 		await applyTo(page, id);
 

@@ -115,7 +115,7 @@ Signature: sig1=:...:
 | `keyid` | RFC 7638 JWK thumbprint (SHA-256, base64url) |
 | Covered components | `@authority`, `signature-agent`; plus `content-digest` when there is a body |
 | Lifetime | 60 seconds (`expires` must be > 0; configurable) |
-| Nonce | Random per request |
+| Nonce | 64 random bytes, base64 (as required by `web-bot-auth`) |
 
 Behaviour shared by both SDKs:
 
@@ -172,6 +172,41 @@ load_cache("~/.cache/wbauth/policy.json")   # optional: persist between runs (ra
 ...
 save_cache("~/.cache/wbauth/policy.json")
 ```
+
+---
+
+## Secure defaults & new APIs (0.4)
+
+**Scope signing.** Adapters sign only `https://` requests by default (`allow_insecure=True` / `allowInsecure: true` for local tests) and can be limited to your targets; out-of-scope hops are sent with signature headers stripped.
+
+```python
+client = signed_async_client(identity, hosts=["*.example.com"], respect_policy=True)  # + PolicyGuard: forbidden → PolicyForbiddenError, Crawl-delay honoured
+```
+```ts
+const f = createSignedFetch(identity, { hosts: ["api.example.com"] });
+```
+
+**Keys.** `keygen` refuses to overwrite; `register` never generates a key. Rotation is persistent with a keyring directory (`active.pem` + `retiring.pem`, both published in the JWKS until the next rotation); keys can be stored encrypted (`password=` / `WBAUTH_KEY_PASSWORD`) or kept in a KMS/HSM via `Identity.from_signer()` / `Identity.fromSigner()`.
+
+```python
+identity = Identity.load_keyring("~/.config/wbauth/keys", signature_agent_url=URL)
+identity = identity.rotate_keyring("~/.config/wbauth/keys")      # CLI: wbauth rotate --keyring DIR
+```
+
+**Verify incoming requests** (both SDKs; nonce replay cache, clock skew, JWKS fetched from `Signature-Agent` with an SSRF guard):
+
+```python
+from wbauth import Verifier
+from wbauth.verifier import WebBotAuthMiddleware
+app.add_middleware(WebBotAuthMiddleware, required=False)   # request.state.web_bot_auth
+agent = await Verifier().verify("GET", url, headers)
+```
+```ts
+import { Verifier } from "wb-auth";
+const agent = await new Verifier().verify(request);   // WHATWG Request
+```
+
+`JSON.stringify(identity)` / `repr(identity)` never contain private key material, and `signatureAgentUrl` is validated (https, no quotes/CRLF).
 
 ---
 

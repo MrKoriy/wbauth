@@ -91,7 +91,9 @@ describe("createSignedFetch — redirects are re-signed per hop", () => {
 	it("hop 2 carries a fresh, valid signature for its own authority", async () => {
 		hits.length = 0;
 		const id = await newId();
-		const res = await createSignedFetch(id)(`${A}/start`);
+		const res = await createSignedFetch(id, { allowInsecure: true })(
+			`${A}/start`,
+		);
 		expect(res.status).toBe(200);
 		expect(res.url).toBe(`${B}/next`);
 		const [h1, h2] = hits;
@@ -105,7 +107,7 @@ describe("createSignedFetch — redirects are re-signed per hop", () => {
 	it("303 turns POST into a bodyless GET without content-digest", async () => {
 		hits.length = 0;
 		const id = await newId();
-		await createSignedFetch(id)(`${A}/s?code=303`, {
+		await createSignedFetch(id, { allowInsecure: true })(`${A}/s?code=303`, {
 			method: "POST",
 			body: "x=1",
 		});
@@ -119,7 +121,7 @@ describe("createSignedFetch — redirects are re-signed per hop", () => {
 	it("307 keeps method and body, re-binding content-digest", async () => {
 		hits.length = 0;
 		const id = await newId();
-		await createSignedFetch(id)(`${A}/s?code=307`, {
+		await createSignedFetch(id, { allowInsecure: true })(`${A}/s?code=307`, {
 			method: "PUT",
 			body: "payload",
 		});
@@ -132,7 +134,7 @@ describe("createSignedFetch — redirects are re-signed per hop", () => {
 	it("strips Authorization/Cookie on cross-origin hops", async () => {
 		hits.length = 0;
 		const id = await newId();
-		await createSignedFetch(id)(`${A}/s`, {
+		await createSignedFetch(id, { allowInsecure: true })(`${A}/s`, {
 			headers: { authorization: "Bearer secret", cookie: "a=b", "x-keep": "1" },
 		});
 		const h2 = hits.find((h) => h.server === "b") as Hit;
@@ -144,7 +146,9 @@ describe("createSignedFetch — redirects are re-signed per hop", () => {
 	it('redirect: "manual" returns the 3xx untouched', async () => {
 		hits.length = 0;
 		const id = await newId();
-		const res = await createSignedFetch(id)(`${A}/s`, { redirect: "manual" });
+		const res = await createSignedFetch(id, { allowInsecure: true })(`${A}/s`, {
+			redirect: "manual",
+		});
 		expect(res.status).toBe(302);
 		expect(hits.filter((h) => h.server === "b")).toHaveLength(0);
 	});

@@ -9,6 +9,7 @@ protects the envelope.)
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
@@ -23,6 +24,8 @@ class RobotsResult:
     raw: str
     user_agent_evaluated: str  # the agent's UA (defaults to "wbauth/<version>")
     crawl_delay: float | None = None  # Crawl-delay for this UA, if any
+    content_signals: dict[str, str] = field(default_factory=dict)
+    """``Content-Signal`` preferences (e.g. ``{"ai-train": "no"}``)."""
 
 
 @dataclass(frozen=True)
@@ -120,3 +123,36 @@ class SitePolicy:
     partial: bool
     errors: dict[str, Exception]
     fetched_at: datetime
+
+    def to_dict(self, *, include_raw: bool = False) -> dict:
+        """JSON-safe representation. Exceptions become ``{"type", "message",
+        "status"}``; raw policy bodies are dropped unless ``include_raw``."""
+
+        def section(obj):
+            if obj is None:
+                return None
+            d = dataclasses.asdict(obj)
+            if not include_raw:
+                d.pop("raw", None)
+            return d
+
+        errors = {}
+        for name, exc in self.errors.items():
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            errors[name] = {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "status": status if isinstance(status, int) else None,
+            }
+        return {
+            "url": self.url,
+            "robots": section(self.robots),
+            "ai_txt": section(self.ai_txt),
+            "llms_txt": section(self.llms_txt),
+            "signing_directory": section(self.signing_directory),
+            "verdict": self.verdict,
+            "reasons": list(self.reasons),
+            "partial": self.partial,
+            "errors": errors,
+            "fetched_at": self.fetched_at.isoformat(),
+        }

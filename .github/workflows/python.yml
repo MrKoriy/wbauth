@@ -1,5 +1,7 @@
 name: Python
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -8,14 +10,16 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           version: "0.13.0"
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       - name: Sync workspace (locked)
         run: uv sync --locked --all-extras --dev --all-packages
+      - name: Dependency audit (pip-audit)
+        run: uvx pip-audit==2.9.0 --progress-spinner off -r <(uv export --locked --all-extras --no-dev --no-hashes --all-packages --no-emit-workspace)
       - name: Lint (ruff, pinned in uv.lock)
         run: uv run ruff check python/
       - name: Type check (pyright, pinned in uv.lock)

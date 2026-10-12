@@ -15,13 +15,14 @@
 import type { Page, Request as PWRequest, Route } from "playwright";
 import type { Identity } from "../identity.js";
 import { sign } from "../signer.js";
-import { applyUserAgent, ensureContentDigest, hostMatches } from "./_utils.js";
+import {
+	applyUserAgent,
+	ensureContentDigest,
+	makeSignDecider,
+	type SignScopeOptions,
+} from "./_utils.js";
 
-export interface ApplyToOptions {
-	/** Only sign requests to these hosts (`example.com`, `*.example.com`). */
-	hosts?: readonly string[];
-	/** Custom predicate; takes precedence over `hosts`. */
-	shouldSign?: (url: URL) => boolean;
+export interface ApplyToOptions extends SignScopeOptions {
 	/** Route pattern passed to `page.route`. Default `"**\/*"`. */
 	pattern?: string;
 }
@@ -30,22 +31,11 @@ export async function applyTo(
 	page: Page,
 	identity: Identity,
 	options: ApplyToOptions = {},
-): Promise<void> {
+): Promise<() => Promise<void>> {
 	const pattern = options.pattern ?? "**/*";
-	const decide = (raw: string): boolean => {
-		let u: URL;
-		try {
-			u = new URL(raw);
-		} catch {
-			return false;
-		}
-		if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-		if (options.shouldSign) return options.shouldSign(u);
-		if (options.hosts) return hostMatches(u.hostname, options.hosts);
-		return true;
-	};
+	const decide = makeSignDecider(options);
 
-	await page.route(pattern, async (route: Route, request: PWRequest) => {
+	const handler = async (route: Route, request: PWRequest) => {
 		const url = request.url();
 		if (!decide(url)) {
 			const r = route as Route & { fallback?: () => Promise<void> };
@@ -59,5 +49,10 @@ export async function applyTo(
 		await sign({ method: request.method(), url, headers, body }, identity);
 		applyUserAgent(headers, identity.userAgent);
 		await route.continue({ headers });
-	});
+	};
+	await page.route(pattern, handler);
+	/** Detach: remove the signing route handler. */
+	return async () => {
+		await page.unroute(pattern, handler);
+	};
 }

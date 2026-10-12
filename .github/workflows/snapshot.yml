@@ -20,13 +20,16 @@ on:
   # schedule:
   #   - cron: '0 2 * * *'   # 02:00 UTC daily (D-45)
 
+permissions:
+  contents: read
+
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required for GITHUB_TOKEN to push to gh-pages
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run snapshot script
         env:
@@ -38,7 +41,7 @@ jobs:
         # peaceiris/actions-gh-pages@v4 — D-45 chose this over actions/deploy-pages@v4
         # because it pushes file artifacts to a branch (vs full-Pages-deploy upload),
         # which matches the "DR-style mirror under snapshots/" output shape.
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./snapshot-build

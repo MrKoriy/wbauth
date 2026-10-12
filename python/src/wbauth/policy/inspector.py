@@ -45,13 +45,17 @@ import datetime
 import ipaddress
 import json
 import os
+import re
+import socket
+import tempfile
+from collections.abc import Iterable
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 
-from .cache import Absent, CacheEntry, PolicyCache, normalize_host
-from .errors import FetchError, RobotsParseError
+from .cache import Absent, CacheEntry, Failed, PolicyCache, normalize_host
+from .errors import FetchError, PrivateAddressError, RobotsParseError
 from .parsers import (
     parse_ai_txt,
     parse_llms_txt,
@@ -75,6 +79,10 @@ OTHER_MAX_BYTES = 1_000_000
 
 _ENDPOINT_NAMES = ("robots", "ai_txt", "llms_txt", "signing_directory")
 
+FAILURE_TTL = 60.0
+"""Network failures/timeouts are negatively cached this long, so a dead
+origin does not cost PER_ENDPOINT_TIMEOUT on every inspect() call."""
+
 # Module-level singleton cache (D-22). Per-process; tests reset it.
 _CACHE = PolicyCache()
 
@@ -84,6 +92,7 @@ def _reset_cache_for_tests() -> None:
     global _CACHE
     _CACHE = PolicyCache()
     _INFLIGHT.clear()
+    _SHARED_CLIENTS.clear()
 
 
 def _origin_host(url: str) -> str:
@@ -118,22 +127,56 @@ def _endpoints(host: str) -> dict[str, str]:
     }
 
 
-def _is_private_host(host: str) -> bool:
-    """True for loopback / private / link-local / reserved IP literals and
-    ``localhost``-style names. Hostnames are not resolved (no extra DNS)."""
-    h = host.strip("[]").lower().rstrip(".")
-    if h == "localhost" or h.endswith((".localhost", ".local", ".internal")):
-        return True
-    try:
-        ip = ipaddress.ip_address(int(h)) if h.isdigit() else ipaddress.ip_address(h)
-    except ValueError:
-        return False
+_LEGACY_V4_RE = re.compile(r"^(0x[0-9a-f]+|[0-9]+)(\.(0x[0-9a-f]+|[0-9]+)){0,3}$")
+
+
+def _ip_is_private(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
     return (
         ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
         or ip.is_multicast or ip.is_unspecified
     )
+
+
+def _is_private_host(host: str) -> bool:
+    """True for loopback / private / link-local / reserved IP literals and
+    ``localhost``-style names. Legacy IPv4 spellings (``2130706433``,
+    ``0x7f000001``, ``127.1``) are normalised. Hostnames are not resolved
+    here — see :func:`_resolves_private`."""
+    h = host.strip("[]").lower().rstrip(".")
+    if h == "localhost" or h.endswith((".localhost", ".local", ".internal")):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        if not _LEGACY_V4_RE.match(h):
+            return False
+        try:
+            ip = ipaddress.ip_address(socket.inet_aton(h))
+        except OSError:
+            return False
+    return _ip_is_private(ip)
+
+
+async def _resolves_private(host: str) -> bool:
+    """True when ``host`` is private by name/literal OR any address it resolves
+    to is private (catches ``127.0.0.1.nip.io``-style names). Resolution
+    failures return False — the fetch itself will then fail normally."""
+    if _is_private_host(host):
+        return True
+    h = host.strip("[]")
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(h, None)
+    except (OSError, UnicodeError):
+        return False
+    for info in infos:
+        try:
+            if _ip_is_private(ipaddress.ip_address(info[4][0])):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
@@ -146,15 +189,20 @@ async def _fetch_one(
     url: str,
     user_agent: str,
     validators: dict[str, str] | None = None,
+    allow_private: bool = True,
 ) -> httpx.Response:
     """Stream one endpoint with a byte cap; raise on non-2xx (304 passes).
 
     Redirects are followed by hand so every hop can be vetted (SSRF guard).
+    With ``allow_private=False`` the origin itself must also be public
+    (by literal and by DNS resolution).
     """
     cap = ROBOTS_MAX_BYTES if name == "robots" else OTHER_MAX_BYTES
     headers = {"User-Agent": user_agent, **(validators or {})}
     current = httpx.URL(url)
-    origin_private = _is_private_host(current.host)
+    if not allow_private and await _resolves_private(current.host):
+        raise PrivateAddressError(f"{name}: private/loopback origin {current.host!r} refused")
+    origin_private = allow_private and _is_private_host(current.host)
     for hop in range(MAX_REDIRECTS + 1):
         async with client.stream(
             "GET",
@@ -172,8 +220,8 @@ async def _fetch_one(
                 nxt = current.join(response.headers["location"])
                 if nxt.scheme not in ("http", "https"):
                     raise FetchError(f"{name}: redirect to unsupported scheme {nxt.scheme!r}")
-                if not origin_private and _is_private_host(nxt.host):
-                    raise FetchError(
+                if not origin_private and await _resolves_private(nxt.host):
+                    raise PrivateAddressError(
                         f"{name}: redirect to private/loopback address {nxt.host!r} refused"
                     )
                 if nxt.host != current.host:
@@ -192,6 +240,10 @@ async def _fetch_one(
                 if len(buf) > cap:
                     if name == "robots":
                         del buf[cap:]
+                        # Never parse a half line: cut at the last newline.
+                        nl = buf.rfind(b"\n")
+                        if nl >= 0:
+                            del buf[nl + 1:]
                         break
                     raise FetchError(f"{name} body exceeds {cap} bytes")
             rebuilt = [
@@ -207,8 +259,38 @@ async def _fetch_one(
     raise AssertionError("unreachable")  # pragma: no cover
 
 
-# (loop id, origin, endpoint) -> shared in-flight task (single-flight).
-_INFLIGHT: dict[tuple[int, str, str], asyncio.Future] = {}
+# (loop id, origin, endpoint, user-agent, allow_private, client id)
+#   -> shared in-flight task (single-flight).
+_INFLIGHT: dict[tuple, asyncio.Future] = {}
+
+# One pooled AsyncClient per event loop, used when the caller passes none.
+# Reusing it saves a TCP+TLS handshake per inspect() and — unlike a
+# per-call ``async with`` client — it cannot be closed under a task that a
+# concurrent caller is still awaiting.
+_SHARED_CLIENTS: dict[int, tuple[asyncio.AbstractEventLoop, httpx.AsyncClient]] = {}
+
+
+def _shared_client() -> httpx.AsyncClient:
+    loop = asyncio.get_running_loop()
+    for k, (lp, _c) in list(_SHARED_CLIENTS.items()):
+        if lp.is_closed():
+            _SHARED_CLIENTS.pop(k, None)
+    entry = _SHARED_CLIENTS.get(id(loop))
+    if entry is None or entry[0] is not loop or entry[1].is_closed:
+        try:
+            client = httpx.AsyncClient(timeout=PER_ENDPOINT_TIMEOUT, http2=True)
+        except ImportError:  # h2 not installed (optional extra)
+            client = httpx.AsyncClient(timeout=PER_ENDPOINT_TIMEOUT)
+        _SHARED_CLIENTS[id(loop)] = (loop, client)
+        return client
+    return entry[1]
+
+
+async def aclose_shared_clients() -> None:
+    """Close the pooled client of the running loop (optional cleanup)."""
+    entry = _SHARED_CLIENTS.pop(id(asyncio.get_running_loop()), None)
+    if entry is not None:
+        await entry[1].aclose()
 
 
 async def _fetch_missing(
@@ -217,10 +299,12 @@ async def _fetch_missing(
     user_agent: str,
     client: httpx.AsyncClient | None,
     validators: dict[str, dict[str, str]] | None = None,
+    allow_private: bool = True,
 ) -> dict[str, httpx.Response | BaseException]:
     """Fetch every endpoint in ``missing`` in parallel; never raises.
 
-    Concurrent callers for the same origin+endpoint share one request.
+    Concurrent callers for the same origin+endpoint+UA share one request.
+    The UA is part of the key because origins may vary content by UA.
     """
     if not missing:
         return {}
@@ -228,29 +312,24 @@ async def _fetch_missing(
     loop_id = id(asyncio.get_running_loop())
     origin = normalize_host(host)
     validators = validators or {}
+    c = client if client is not None else _shared_client()
 
-    async def run(c: httpx.AsyncClient) -> list[Any]:
-        waits: list[asyncio.Future] = []
-        for name in missing:
-            key = (loop_id, origin, name)
-            task = _INFLIGHT.get(key)
-            if task is None:
-                task = asyncio.ensure_future(
-                    asyncio.wait_for(
-                        _fetch_one(c, name, urls[name], user_agent, validators.get(name)),
-                        timeout=PER_ENDPOINT_TIMEOUT,
-                    )
+    waits: list[asyncio.Future] = []
+    for name in missing:
+        key = (loop_id, origin, name, user_agent, allow_private, id(c))
+        task = _INFLIGHT.get(key)
+        if task is None:
+            task = asyncio.ensure_future(
+                asyncio.wait_for(
+                    _fetch_one(c, name, urls[name], user_agent, validators.get(name),
+                               allow_private=allow_private),
+                    timeout=PER_ENDPOINT_TIMEOUT,
                 )
-                _INFLIGHT[key] = task
-                task.add_done_callback(lambda _t, k=key: _INFLIGHT.pop(k, None))
-            waits.append(asyncio.shield(task))
-        return await asyncio.gather(*waits, return_exceptions=True)
-
-    if client is not None:
-        results = await run(client)
-    else:
-        async with httpx.AsyncClient(timeout=PER_ENDPOINT_TIMEOUT) as own:
-            results = await run(own)
+            )
+            _INFLIGHT[key] = task
+            task.add_done_callback(lambda _t, k=key: _INFLIGHT.pop(k, None))
+        waits.append(asyncio.shield(task))
+    results = await asyncio.gather(*waits, return_exceptions=True)
     return dict(zip(missing, results, strict=True))
 
 
@@ -275,11 +354,23 @@ def save_cache(path: str | os.PathLike) -> int:
     """Persist the process-wide policy cache to ``path`` (JSON). Returns the
     number of entries written. Only raw bodies are stored, never secrets."""
     items = _CACHE.dump()
-    tmp = f"{os.fspath(path)}.tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump({"version": 1, "entries": items}, fh)
-    os.replace(tmp, path)
-    return len(items)
+    target = os.fspath(path)
+    fd, tmp = tempfile.mkstemp(
+        prefix=".wbauth-cache-", suffix=".tmp", dir=os.path.dirname(target) or "."
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"version": 1, "entries": items}, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return sum(1 for it in items if not it.get("stale"))
 
 
 def load_cache(path: str | os.PathLike) -> int:
@@ -306,34 +397,95 @@ async def inspect(
     *,
     user_agent: str | None = None,
     client: httpx.AsyncClient | None = None,
+    endpoints: Iterable[str] | None = None,
+    stop_on_forbidden: bool = False,
+    allow_private: bool = True,
 ) -> SitePolicy:
     """Run the pre-flight inspector against ``url``.
 
     Args:
         url: Target URL, e.g. ``https://example.com/articles/42``.
         user_agent: The agent's User-Agent. robots.txt rules are evaluated for
-            it and it is sent on the policy fetches. Default ``"wbauth/0.1"``.
+            it and it is sent on the policy fetches. Default ``"wbauth/<ver>"``.
         client: Optional shared ``httpx.AsyncClient`` for connection reuse.
-            It is not closed by ``inspect``.
+            It is not closed by ``inspect``. Without it a pooled per-loop
+            client is used.
+        endpoints: Subset of ``robots``, ``ai_txt``, ``llms_txt``,
+            ``signing_directory`` to consult (default: all four). Skipped
+            endpoints are ``None`` and never counted as errors.
+        stop_on_forbidden: fetch robots.txt first and skip the other
+            endpoints when it already yields ``forbidden``.
+        allow_private: when ``False``, refuse origins that are (or resolve
+            to) loopback/private/link-local addresses — use this when the
+            URL comes from untrusted input (SSRF). Redirects from a public
+            origin into private space are always refused.
 
     Raises:
-        ValueError: when the URL is not http(s) or has no host.
+        ValueError: when the URL is not http(s), has no host, or an unknown
+            endpoint name is passed.
     """
     host = _origin_host(url)
     ua = user_agent or DEFAULT_USER_AGENT
     urls = _endpoints(host)
+    wanted = tuple(endpoints) if endpoints is not None else _ENDPOINT_NAMES
+    unknown = set(wanted) - set(_ENDPOINT_NAMES)
+    if unknown:
+        raise ValueError(f"inspect: unknown endpoint(s): {sorted(unknown)}")
 
     raw: dict[str, Any] = {ep: None for ep in _ENDPOINT_NAMES}
     errors: dict[str, Exception] = {}
     missing: list[str] = []
-    for ep in _ENDPOINT_NAMES:
+    for ep in wanted:
         entry = _CACHE.get(host, ep)
         if entry is None:
             missing.append(ep)
         elif isinstance(entry.value, Absent):
             errors[ep] = _absent_error(urls[ep], entry.value.status_code)
+        elif isinstance(entry.value, Failed):
+            errors[ep] = entry.value.error
         else:
             raw[ep] = entry.value
+
+    skipped_reason: str | None = None
+    if stop_on_forbidden and "robots" in missing and len(missing) > 1:
+        await _inspect_fetch(host, ["robots"], ua, client, allow_private, raw, errors)
+        missing.remove("robots")
+        if _robots_forbids(raw.get("robots"), errors.get("robots"), url, ua):
+            skipped_reason = (
+                "stop_on_forbidden: robots.txt forbids this path; skipped "
+                + ", ".join(missing)
+            )
+            missing = []
+    elif stop_on_forbidden and _robots_forbids(raw.get("robots"), errors.get("robots"),
+                                               url, ua):
+        skipped_reason = "stop_on_forbidden: robots.txt forbids this path"
+        missing = []
+
+    await _inspect_fetch(host, missing, ua, client, allow_private, raw, errors)
+    return _build_policy(url, ua, raw, errors, skipped_reason)
+
+
+def _robots_forbids(src: Any, err: Exception | None, url: str, ua: str) -> bool:
+    from .verdict import compute_verdict as _cv
+
+    robots = evaluate_robots(src, url, ua) if isinstance(src, RobotsSource) else None
+    verdict, _ = _cv(robots=robots, ai_txt=None, llms_txt=None, signing_directory=None,
+                     errors={"robots": err} if err is not None else {}, partial=False)
+    return verdict == "forbidden"
+
+
+async def _inspect_fetch(
+    host: str,
+    missing: list[str],
+    ua: str,
+    client: httpx.AsyncClient | None,
+    allow_private: bool,
+    raw: dict[str, Any],
+    errors: dict[str, Exception],
+) -> None:
+    """Fetch + parse + cache ``missing`` endpoints into ``raw`` / ``errors``."""
+    if not missing:
+        return
 
     validators: dict[str, dict[str, str]] = {}
     stale: dict[str, CacheEntry] = {}
@@ -349,7 +501,7 @@ async def inspect(
             v["If-Modified-Since"] = old.last_modified
         validators[ep] = v
 
-    fetched = await _fetch_missing(host, missing, ua, client, validators)
+    fetched = await _fetch_missing(host, missing, ua, client, validators, allow_private)
 
     for ep, fr in fetched.items():
         if isinstance(fr, BaseException):
@@ -359,6 +511,10 @@ async def inspect(
                 errors[ep] = httpx.TimeoutException(
                     f"{ep} fetch exceeded {PER_ENDPOINT_TIMEOUT}s"
                 )
+                _CACHE.set(host, ep, Failed(errors[ep]), ttl_override=FAILURE_TTL)
+            elif isinstance(fr, httpx.RequestError):
+                errors[ep] = fr
+                _CACHE.set(host, ep, Failed(fr), ttl_override=FAILURE_TTL)
             elif isinstance(fr, httpx.HTTPStatusError):
                 errors[ep] = fr
                 status = fr.response.status_code
@@ -367,6 +523,8 @@ async def inspect(
                         host, ep, Absent(status),
                         cache_control=fr.response.headers.get("cache-control"),
                     )
+                else:  # 429 / 5xx — retry soon, but not on every call
+                    _CACHE.set(host, ep, Failed(fr), ttl_override=FAILURE_TTL)
             elif isinstance(fr, Exception):
                 errors[ep] = fr
             else:  # pragma: no cover — BaseException not Exception (e.g. CancelledError)
@@ -378,6 +536,7 @@ async def inspect(
             _CACHE.set(
                 host, ep, old.value,
                 cache_control=fr.headers.get("cache-control"),
+                age=fr.headers.get("age"),
                 etag=fr.headers.get("etag") or old.etag,
                 last_modified=fr.headers.get("last-modified") or old.last_modified,
                 raw=old.raw, content_type=old.content_type,
@@ -398,12 +557,22 @@ async def inspect(
         _CACHE.set(
             host, ep, parsed_value,
             cache_control=fr.headers.get("cache-control"),
+            age=fr.headers.get("age"),
             etag=fr.headers.get("etag"),
             last_modified=fr.headers.get("last-modified"),
             raw=fr.text,
             content_type=fr.headers.get("content-type"),
         )
 
+
+
+def _build_policy(
+    url: str,
+    ua: str,
+    raw: dict[str, Any],
+    errors: dict[str, Exception],
+    skipped_reason: str | None = None,
+) -> SitePolicy:
     robots_src = raw["robots"]
     robots = (
         evaluate_robots(robots_src, url, ua)
@@ -428,6 +597,8 @@ async def inspect(
         partial=partial,
         target_path=urlsplit(url).path or "/",
     )
+    if skipped_reason:
+        reasons = [*reasons, skipped_reason]
     return SitePolicy(
         url=url,
         robots=robots,
@@ -440,3 +611,27 @@ async def inspect(
         errors=errors,
         fetched_at=datetime.datetime.now(datetime.timezone.utc),
     )
+
+
+def inspect_sync(url: str, **kwargs: Any) -> SitePolicy:
+    """Blocking wrapper around :func:`inspect` for non-async code.
+
+    Must not be called from inside a running event loop (use ``await
+    inspect(...)`` there).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError("inspect_sync() called from a running event loop; "
+                           "use `await inspect(...)` instead")
+
+    async def _run() -> SitePolicy:
+        try:
+            return await inspect(url, **kwargs)
+        finally:
+            if kwargs.get("client") is None:
+                await aclose_shared_clients()
+
+    return asyncio.run(_run())

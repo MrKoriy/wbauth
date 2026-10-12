@@ -22,7 +22,12 @@ from ..policy import LlmsTxtLink, LlmsTxtResult, LlmsTxtSection
 _MAX_BYTES = 1_000_000
 
 # matches: - [title](url): notes      OR      - [title](url)
-_LINK_RE = re.compile(r"^-\s*\[([^\]]+)\]\(([^)]+)\)(?::\s*(.*))?$")
+# Bullets may be -, * or +; URLs may contain one level of balanced parens
+# (e.g. Wikipedia links).
+_LINK_RE = re.compile(
+    r"^[-*+]\s*\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)(?::\s*(.*))?$"
+)
+_QUOTE_RE = re.compile(r"^>\s?")
 
 
 def parse_llms_txt(text: str) -> LlmsTxtResult:
@@ -39,15 +44,22 @@ def parse_llms_txt(text: str) -> LlmsTxtResult:
     description = ""
     sections: list[LlmsTxtSection] = []
     current: LlmsTxtSection | None = None
+    quote: list[str] = []
+    in_quote = False
 
     for raw_line in text.splitlines():
         line = raw_line.rstrip()
         if not title and line.startswith("# "):
             title = line[2:].strip()
             continue
+        # The first blockquote (possibly multi-line) is the description.
         if not description and line.startswith(">"):
-            description = line.lstrip("> ").strip()
+            in_quote = True
+            quote.append(_QUOTE_RE.sub("", line, count=1).strip())
             continue
+        if in_quote:
+            in_quote = False
+            description = " ".join(q for q in quote if q)
         if line.startswith("## "):
             current = LlmsTxtSection(name=line[3:].strip(), links=[])
             sections.append(current)
@@ -61,6 +73,9 @@ def parse_llms_txt(text: str) -> LlmsTxtResult:
                     notes=(m.group(3) or "").strip(),
                 )
             )
+
+    if in_quote and not description:
+        description = " ".join(q for q in quote if q)
 
     return LlmsTxtResult(
         title=title,

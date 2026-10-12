@@ -13,14 +13,39 @@
  *   const res = await sf("https://api.example.com/data");
  */
 
+export type { SignScopeOptions } from "./adapters/_utils.js";
 export type { SignedFetchOptions } from "./adapters/fetch.js";
 export { createSignedFetch } from "./adapters/fetch.js";
 export type { ApplyToOptions } from "./adapters/playwright.js";
 export { applyTo } from "./adapters/playwright.js";
-export type { IdentityOptions, KeyPair } from "./identity.js";
-export { DEFAULT_KEY_PATH, Identity } from "./identity.js";
+export type {
+	Ed25519SignerBackend,
+	IdentityOptions,
+	KeyOptions,
+	KeyPair,
+	PublicJwk,
+	Signer,
+} from "./identity.js";
+export {
+	DEFAULT_KEY_PATH,
+	Identity,
+	KEY_PASSWORD_ENV,
+	thumbprint,
+	validateSignatureAgentUrl,
+} from "./identity.js";
 export type { NormalizedRequest } from "./normalized-request.js";
 export type { SignatureHeaders, SignOptions } from "./signer.js";
-export { sign } from "./signer.js";
+export { normalizeAuthority, sign } from "./signer.js";
+export type {
+	KeyResolver,
+	VerifiedAgent,
+	VerifierOptions,
+} from "./verifier.js";
+export {
+	createVerifierMiddleware,
+	NonceStore,
+	VerificationError,
+	Verifier,
+} from "./verifier.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";

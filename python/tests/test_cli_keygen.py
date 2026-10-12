@@ -124,7 +124,7 @@ def test_main_returns_130_on_keyboard_interrupt(tmp_path, capsys):
     """
     keyfile = tmp_path / "key.pem"
     with patch(
-        "wbauth.cli.Identity.load_or_generate",
+        "wbauth.cli.Identity.generate",
         side_effect=KeyboardInterrupt(),
     ):
         rc = cli_module.main(["keygen", "--output", str(keyfile)])

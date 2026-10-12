@@ -17,11 +17,22 @@ to re-sign every hop::
 """
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING
+
 import requests
 from requests.adapters import HTTPAdapter
 from requests.auth import AuthBase
 
-from wbauth.adapters._utils import ensure_content_digest, should_apply_user_agent
+from wbauth.adapters._utils import (
+    ensure_content_digest,
+    make_sign_decider,
+    should_apply_user_agent,
+    strip_signature_headers,
+)
+
+if TYPE_CHECKING:
+    from wbauth.identity import Identity
 from wbauth.normalized_request import NormalizedRequest
 from wbauth.signer import sign
 
@@ -49,15 +60,27 @@ def _buffer_body(prepared_request) -> bytes | None:
 class WebBotAuthAdapter(AuthBase):
     """Drop-in ``requests`` auth that adds Web Bot Auth signatures."""
 
-    def __init__(self, identity):
+    def __init__(
+        self,
+        identity: "Identity",
+        *,
+        hosts: Iterable[str] | None = None,
+        should_sign: Callable[[str], bool] | None = None,
+        allow_insecure: bool = False,
+    ):
         self._identity = identity
+        self._decide = make_sign_decider(hosts, should_sign, allow_insecure)
 
     def __call__(self, prepared_request):
+        if not self._decide(prepared_request.url or ""):
+            strip_signature_headers(prepared_request.headers)
+            return prepared_request
         body = _buffer_body(prepared_request)
         headers = dict(prepared_request.headers)
         ensure_content_digest(prepared_request.method, headers, body)
-        if "Content-Digest" in headers:
-            prepared_request.headers["Content-Digest"] = headers["Content-Digest"]
+        cd = next((v for k, v in headers.items() if k.lower() == "content-digest"), None)
+        if cd is not None:
+            prepared_request.headers["Content-Digest"] = cd
         normalized = NormalizedRequest(
             method=prepared_request.method, url=prepared_request.url,
             headers=headers, body=body,
@@ -75,8 +98,17 @@ class WebBotAuthAdapter(AuthBase):
 class WebBotAuthTransport(HTTPAdapter):
     """Transport adapter that signs at send time — covers every redirect hop."""
 
-    def __init__(self, identity, *args, **kwargs):
-        self._auth = WebBotAuthAdapter(identity)
+    def __init__(
+        self,
+        identity: "Identity",
+        *args,
+        hosts: Iterable[str] | None = None,
+        should_sign: Callable[[str], bool] | None = None,
+        allow_insecure: bool = False,
+        **kwargs,
+    ):
+        self._auth = WebBotAuthAdapter(identity, hosts=hosts, should_sign=should_sign,
+                                       allow_insecure=allow_insecure)
         super().__init__(*args, **kwargs)
 
     def send(self, request, *args, **kwargs):  # type: ignore[override]
@@ -84,10 +116,23 @@ class WebBotAuthTransport(HTTPAdapter):
         return super().send(request, *args, **kwargs)
 
 
-def signed_session(identity, session: requests.Session | None = None) -> requests.Session:
-    """Return a ``requests.Session`` whose every request (and redirect) is signed."""
+def signed_session(
+    identity: "Identity",
+    session: requests.Session | None = None,
+    *,
+    hosts: Iterable[str] | None = None,
+    should_sign: Callable[[str], bool] | None = None,
+    allow_insecure: bool = False,
+    **adapter_kwargs,
+) -> requests.Session:
+    """Return a ``requests.Session`` whose every request (and redirect) is signed.
+
+    ``adapter_kwargs`` (``max_retries``, ``pool_maxsize``…) go to the mounted
+    ``HTTPAdapter``. Plain-http hops are sent unsigned unless ``allow_insecure``.
+    """
     s = session or requests.Session()
-    transport = WebBotAuthTransport(identity)
+    transport = WebBotAuthTransport(identity, hosts=hosts, should_sign=should_sign,
+                                    allow_insecure=allow_insecure, **adapter_kwargs)
     s.mount("https://", transport)
     s.mount("http://", transport)
     return s

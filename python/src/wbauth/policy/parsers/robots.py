@@ -10,6 +10,7 @@ reused for ``/private``.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from protego import Protego
@@ -42,17 +43,69 @@ def parse_robots_source(text: str, content_type: str | None) -> RobotsSource:
     return RobotsSource(parser=Protego.parse(text), raw=text)
 
 
+_CONTENT_SIGNAL_RE = re.compile(r"^\s*content-signal\s*:\s*(.+?)\s*(?:#.*)?$", re.I)
+_UA_LINE_RE = re.compile(r"^\s*user-agent\s*:\s*(.+?)\s*(?:#.*)?$", re.I)
+
+
+def product_token(user_agent: str) -> str:
+    """RFC 9309 §2.2.1: robots groups match the UA *product token*
+    (``ExampleBot`` in ``ExampleBot/1.0 (+https://…)``)."""
+    token = re.split(r"[/\s(]", user_agent.strip(), maxsplit=1)[0]
+    return token or user_agent
+
+
+def parse_content_signals(text: str, user_agent: str) -> dict[str, str]:
+    """Parse Cloudflare-style ``Content-Signal: search=yes, ai-train=no``
+    lines (contentsignals.org). Signals in a group whose User-agent matches
+    the product token (or ``*``) apply; the specific group wins over ``*``."""
+    token = product_token(user_agent).lower()
+    groups: list[tuple[set[str], dict[str, str]]] = []
+    agents: set[str] = set()
+    signals: dict[str, str] = {}
+    last_was_ua = False
+    for line in text.splitlines():
+        m = _UA_LINE_RE.match(line)
+        if m:
+            if not last_was_ua:
+                if agents:
+                    groups.append((agents, signals))
+                agents, signals = set(), {}
+            agents.add(m.group(1).lower())
+            last_was_ua = True
+            continue
+        if line.strip() and not line.lstrip().startswith("#"):
+            last_was_ua = False
+        m = _CONTENT_SIGNAL_RE.match(line)
+        if m:
+            for part in m.group(1).split(","):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    signals[k.strip().lower()] = v.strip().lower()
+    if agents:
+        groups.append((agents, signals))
+    generic: dict[str, str] = {}
+    specific: dict[str, str] = {}
+    for ags, sig in groups:
+        if "*" in ags:
+            generic.update(sig)
+        if any(a != "*" and a in token for a in ags):
+            specific.update(sig)
+    return {**generic, **specific}
+
+
 def evaluate_robots(
     source: RobotsSource, target_url: str, user_agent: str = DEFAULT_USER_AGENT
 ) -> RobotsResult:
     """Evaluate cached rules for one ``(target_url, user_agent)`` pair."""
     rp = source.parser
+    token = product_token(user_agent)
     return RobotsResult(
-        can_fetch_url=rp.can_fetch(target_url, user_agent),
+        can_fetch_url=rp.can_fetch(target_url, token),
         sitemaps=list(rp.sitemaps),
         raw=source.raw,
         user_agent_evaluated=user_agent,
-        crawl_delay=rp.crawl_delay(user_agent),
+        crawl_delay=rp.crawl_delay(token),
+        content_signals=parse_content_signals(source.raw, user_agent),
     )
 
 
