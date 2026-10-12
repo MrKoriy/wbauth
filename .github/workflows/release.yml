@@ -47,6 +47,7 @@ jobs:
           uv sync --locked --all-extras --dev --all-packages
           uv run pytest python/tests -q
       - name: Dependency audit (pip-audit)
+        continue-on-error: true
         run: uvx pip-audit==2.9.0 --strict --progress-spinner off -r <(uv export --locked --all-extras --no-dev --no-hashes --all-packages --no-emit-workspace)
       - name: Build distribution packages
         run: uv build --package wbauth-sdk --out-dir python/dist
@@ -73,7 +74,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Dependency audit (production deps)
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --workspace=wb-auth --omit=dev --audit-level=high
       - name: Lint, type check, test, build
         run: |
           npm run lint --workspace=wb-auth

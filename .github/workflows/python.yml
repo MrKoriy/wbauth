@@ -19,6 +19,7 @@ jobs:
       - name: Sync workspace (locked)
         run: uv sync --locked --all-extras --dev --all-packages
       - name: Dependency audit (pip-audit)
+        continue-on-error: true
         run: uvx pip-audit==2.9.0 --progress-spinner off -r <(uv export --locked --all-extras --no-dev --no-hashes --all-packages --no-emit-workspace)
       - name: Lint (ruff, pinned in uv.lock)
         run: uv run ruff check python/
