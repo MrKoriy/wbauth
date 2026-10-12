@@ -18,9 +18,9 @@
     "@hono/standard-validator": "^0.2.2"
   },
   "devDependencies": {
-    "wrangler": "^4.87.0",
-    "@cloudflare/workers-types": "^4.20260504.1",
-    "@cloudflare/vitest-pool-workers": "^0.15.2",
-    "vitest": "^4"
+    "wrangler": "^4.149.0",
+    "@cloudflare/workers-types": "^5.20261009.1",
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "vitest": "^5"
   }
 }
