@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "hono": "^4.12.16",
+    "hono": "^4.13.13",
     "web-bot-auth": "^0.1.3",
     "zod": "^4.4.3",
     "@hono/standard-validator": "^0.2.2"
