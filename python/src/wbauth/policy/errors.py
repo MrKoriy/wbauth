@@ -32,3 +32,8 @@ class FetchError(PolicyError):
 class VerdictError(PolicyError):
     """Raised on internal verdict engine inconsistency (defensive check
     for unit tests; should never reach the user)."""
+
+
+class PrivateAddressError(FetchError):
+    """A fetch (or redirect hop) targeted a loopback/private/link-local
+    address and was refused (SSRF guard). Maps to ``forbidden``."""

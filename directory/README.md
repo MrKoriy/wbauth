@@ -15,8 +15,8 @@ and accepts proof-of-key-ownership registrations (D-38).
 | GET    | `/.well-known/http-message-signatures-directory`            | Directory's own signed JWKS (1 key) per Open Question #1.                |
 | GET    | `/.well-known/http-message-signatures-directory/{kid}`      | Agent JWKS, signed by the directory's key.                               |
 | GET    | `/agents/{kid}`                                             | Full Signature Agent Card (unsigned JSON, `max-age=60`).                 |
-| GET    | `/agents?page=N`                                            | Paginated list (50/page).                                                |
-| GET    | `/static/all.json`                                          | Full snapshot — Plan 03-02's nightly Action consumes this.               |
+| GET    | `/agents?cursor=C`                                          | Keyset-paginated list (50/page); follow `next_cursor` until `null`.      |
+| GET    | `/static/all.json?cursor=C`                                 | Snapshot, 1000/page via `next_cursor` (no contacts — they are private).  |
 | GET    | `/healthz`                                                  | `{ok:true}`. Good for uptime checks.                                    |
 | GET    | `/`                                                         | Searchable HTML list (`?q=`), verified agents first.                     |
 | GET    | `/badge/{kid}.svg`                                          | README badge: `verified` / `registered` / `unknown`.                     |

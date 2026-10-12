@@ -55,10 +55,14 @@ describe("createSignedFetch", () => {
 		const sf = createSignedFetch(id);
 		await sf("https://api.example.com/a");
 		await sf("https://api.example.com/b");
-		const n1 = (captured[0]?.init?.headers as Record<string, string>)[
+		const firstCall = captured[0];
+		const secondCall = captured[1];
+		expect(firstCall?.init?.headers).toBeDefined();
+		expect(secondCall?.init?.headers).toBeDefined();
+		const n1 = (firstCall!.init!.headers as Record<string, string>)[
 			"Signature-Input"
 		];
-		const n2 = (captured[1]?.init?.headers as Record<string, string>)[
+		const n2 = (secondCall!.init!.headers as Record<string, string>)[
 			"Signature-Input"
 		];
 		expect(n1).not.toBe(n2);

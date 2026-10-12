@@ -20,7 +20,8 @@ so ``EXAMPLE.com`` and ``example.com:443`` share one entry.
 
 Negative results (an endpoint answered 4xx, i.e. "not published") are cached
 too — as :class:`Absent` — so repeated ``inspect()`` calls do not re-download
-404s. Cache is per-process and resets on restart (D-23 — no persistence).
+404s. Network failures are cached briefly as :class:`Failed`. The cache is
+per-process; ``save_cache`` / ``load_cache`` persist it explicitly.
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ MAX_TTL = 24 * 3600
 
 MAX_ENTRIES = 4096
 
-_MAX_AGE_RE = re.compile(r"(?:^|[,\s])(?:s-)?max-age\s*=\s*\"?(\d+)", re.IGNORECASE)
+_MAX_AGE_RE = re.compile(r"(?:^|[,\s])(?:s-maxage|max-age)\s*=\s*\"?(\d+)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,15 @@ class Absent:
     """Negative-cache marker: the endpoint answered ``status_code`` (4xx)."""
 
     status_code: int
+
+
+@dataclass(frozen=True)
+class Failed:
+    """Short-lived negative-cache marker for network errors / 429 / 5xx.
+
+    In-memory only (never persisted by :meth:`PolicyCache.dump`)."""
+
+    error: Exception
 
 
 @dataclass
@@ -88,6 +98,9 @@ def _parse_cache_control(header: str | None) -> tuple[bool, int | None]:
     if not header:
         return True, None
     h = header.lower()
+    # ``no-cache`` = "store, but revalidate before reuse": the entry is kept
+    # in the validator store (see PolicyCache.set) and revalidated with a
+    # conditional GET, it just never counts as fresh.
     if "no-store" in h or "no-cache" in h:
         return False, None
     m = _MAX_AGE_RE.search(h)
@@ -125,6 +138,7 @@ class PolicyCache:
         raw: str | None = None,
         content_type: str | None = None,
         ttl_override: float | None = None,
+        age: str | int | None = None,
     ) -> None:
         """Store ``value`` honouring the origin's Cache-Control directives."""
         default_ttl = DEFAULT_TTLS[endpoint]  # raises KeyError on unknown endpoint
@@ -144,6 +158,12 @@ class PolicyCache:
             if not cacheable:
                 return
             ttl = default_ttl if max_age is None else min(max_age, MAX_TTL)
+            if max_age is not None and age is not None:
+                # RFC 9111 §4.2.3: freshness left = max-age − Age.
+                try:
+                    ttl -= max(0, int(str(age).strip()))
+                except ValueError:
+                    pass
         if ttl <= 0:
             return
         entry.ttl = float(ttl)
@@ -154,10 +174,18 @@ class PolicyCache:
         return self._stale.get((normalize_host(host), endpoint))
 
     def dump(self) -> list[dict]:
-        """Serialize live entries (raw bodies + metadata) to JSON-safe dicts."""
+        """Serialize live entries (raw bodies + metadata) to JSON-safe dicts.
+
+        Expired entries that still carry validators are written with
+        ``"stale": true`` so the next process can revalidate them (304)
+        instead of re-downloading."""
         out: list[dict] = []
         now = time.time()
+        live_keys = set()
         for (host, endpoint), e in list(self._cache.items()):
+            if isinstance(e.value, Failed):
+                continue
+            live_keys.add((host, endpoint))
             remaining = e.ttl - (now - e.stored_at)
             if remaining <= 0:
                 continue
@@ -173,6 +201,14 @@ class PolicyCache:
             else:
                 continue
             out.append(item)
+        for (host, endpoint), e in list(self._stale.items()):
+            if (host, endpoint) in live_keys or e.raw is None:
+                continue
+            out.append({
+                "host": host, "endpoint": endpoint, "etag": e.etag,
+                "last_modified": e.last_modified, "content_type": e.content_type,
+                "raw": e.raw, "stale": True,
+            })
         return out
 
     def restore(self, items: list[dict], parse) -> int:
@@ -181,6 +217,21 @@ class PolicyCache:
         now = time.time()
         n = 0
         for it in items:
+            if not isinstance(it, dict):
+                continue
+            if it.get("stale"):
+                try:
+                    host, endpoint, raw = str(it["host"]), it["endpoint"], str(it["raw"])
+                    if endpoint not in DEFAULT_TTLS or not (it.get("etag") or it.get("last_modified")):
+                        continue
+                    value = parse(endpoint, raw, it.get("content_type"))
+                except Exception:  # noqa: BLE001
+                    continue
+                self._stale[(normalize_host(host), endpoint)] = CacheEntry(
+                    value=value, etag=it.get("etag"), last_modified=it.get("last_modified"),
+                    raw=raw, content_type=it.get("content_type"), stored_at=now,
+                )
+                continue
             try:
                 remaining = float(it["expires_at"]) - now
                 endpoint = it["endpoint"]
@@ -193,6 +244,8 @@ class PolicyCache:
                     raw = str(it["raw"])
                     value = parse(endpoint, raw, it.get("content_type"))
             except Exception:  # noqa: BLE001 — a corrupt entry is skipped, never fatal
+                continue
+            if not isinstance(it.get("host"), str):
                 continue
             self.set(
                 it["host"], endpoint, value, etag=it.get("etag"),

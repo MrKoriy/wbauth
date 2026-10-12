@@ -23,10 +23,24 @@ mkdir -p "$OUT_DIR"
 DATE=$(date -u +%Y-%m-%d)
 DEST="${OUT_DIR}/directory-snapshot-${DATE}.json"
 
-echo "Fetching ${DIRECTORY_URL}/static/all.json -> ${DEST}"
-curl --fail --silent --show-error --location \
-  "${DIRECTORY_URL}/static/all.json" \
-  -o "${DEST}"
+# /static/all.json is keyset-paginated (1000/page): follow next_cursor and
+# merge every page into one {generated_at, count, agents} document.
+echo "Fetching ${DIRECTORY_URL}/static/all.json (all pages) -> ${DEST}"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+CURSOR=""
+PAGE=0
+while :; do
+  URL="${DIRECTORY_URL}/static/all.json"
+  [ -n "$CURSOR" ] && URL="${URL}?cursor=${CURSOR}"
+  curl --fail --silent --show-error --location "$URL" -o "${TMP}/page-$(printf %05d "$PAGE").json"
+  CURSOR=$(jq -r '.next_cursor // empty' "${TMP}/page-$(printf %05d "$PAGE").json")
+  PAGE=$((PAGE + 1))
+  [ -z "$CURSOR" ] && break
+  [ "$PAGE" -ge 10000 ] && { echo "too many pages" >&2; exit 1; }
+done
+jq -s '{generated_at: (.[0].generated_at), count: (map(.agents | length) | add), agents: (map(.agents) | add)}' \
+  "${TMP}"/page-*.json > "${DEST}"
 
 cp "${DEST}" "${OUT_DIR}/latest.json"
 

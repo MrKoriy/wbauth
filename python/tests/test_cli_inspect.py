@@ -238,6 +238,7 @@ def test_inspect_json_serializes_errors_dict_with_type_and_message(capsys):
     assert doc["errors"]["ai_txt"] == {
         "type": "TimeoutError",
         "message": "3s exceeded",
+        "status": None,
     }
 
 

@@ -19,7 +19,7 @@ import { getConnInfo } from "hono/cloudflare-workers";
 import { verify } from "web-bot-auth";
 import { verifierFromJWK } from "web-bot-auth/crypto";
 import type { Env } from "../env";
-import { isReservedName } from "../blocklist";
+import { findReservedField } from "../blocklist";
 import { purgeAgentCache } from "../cache";
 import {
   coveredComponents,
@@ -99,12 +99,13 @@ registerRouter.post(
     );
     if (!allowed) return c.json({ error: "rate_limited" }, 429);
 
-    const blocked = isReservedName(body.client_name);
+    const blocked = findReservedField(body);
     if (blocked) {
       return c.json(
         {
           error: "reserved_name",
-          blocked_token: blocked,
+          blocked_token: blocked.token,
+          field: blocked.field,
           guidance:
             "If you represent this organization and want this name in the directory, open an issue at https://github.com/MrKoriy/wbauth/issues",
         },
@@ -120,6 +121,49 @@ registerRouter.post(
     }
     const jwk = body.keys.keys.find((k) => k.kid === body.kid);
     if (!jwk) return c.json({ error: "kid_not_in_jwks" }, 400);
+
+    // 1b. Proof of possession for every extra key (audit #5). The request
+    //     signature only proves control of body.kid. Any other key in the
+    //     published JWKS must already be proven: either it was part of this
+    //     kid's previous (signed) registration, or it is itself a registered
+    //     agent key. Otherwise anyone could publish someone else's public key
+    //     under their own Signature-Agent and inherit its reputation.
+    const extra = body.keys.keys.filter((k) => k.kid !== body.kid);
+    if (extra.length > 0) {
+      const prev = await c.env.DB.prepare(`SELECT keys FROM agents WHERE kid = ?`)
+        .bind(body.kid)
+        .first<{ keys: string }>();
+      const prevX = new Set<string>(
+        prev
+          ? ((JSON.parse(prev.keys) as { keys?: { x: string }[] }).keys ?? []).map((k) => k.x)
+          : [],
+      );
+      for (const k of extra) {
+        if (prevX.has(k.x)) continue;
+        const own = await c.env.DB.prepare(`SELECT keys FROM agents WHERE kid = ?`)
+          .bind(k.kid)
+          .first<{ keys: string }>();
+        const ownX = own
+          ? ((JSON.parse(own.keys) as { keys?: { kid: string; x: string }[] }).keys ?? []).find(
+              (j) => j.kid === k.kid,
+            )?.x
+          : undefined;
+        if (ownX !== k.x) {
+          return c.json(
+            {
+              error: "unproven_key",
+              kid: k.kid,
+              guidance:
+                "Additional keys must be registered (signed) on their own first, or already belong to this agent.",
+            },
+            400,
+          );
+        }
+      }
+    }
+    if (new Set(body.keys.keys.map((k) => k.kid)).size !== body.keys.keys.length) {
+      return c.json({ error: "duplicate_kid" }, 400);
+    }
 
     // 2. Signature must cover content-digest, and the digest must match.
     const sigInput = c.req.header("signature-input");
@@ -209,7 +253,10 @@ registerRouter.post(
         body.purpose ?? null,
         body.targeted_content ?? null,
         body.rate_control ?? null,
-        JSON.stringify(body.keys),
+        // Canonical public-only JWKS string; served verbatim by read.ts.
+        JSON.stringify({
+          keys: body.keys.keys.map((k) => ({ kty: k.kty, crv: k.crv, kid: k.kid, x: k.x })),
+        }),
         now,
         domain.verified ? 1 : 0,
         domain.verified ? now : null,

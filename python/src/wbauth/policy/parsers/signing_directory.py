@@ -25,7 +25,9 @@ def parse_signing_directory(
     Malformed JSON is treated as "absent" rather than raising — the verdict
     engine doesn't care WHY parsing failed, just that it can't.
     """
-    ct_correct = bool(content_type) and content_type.startswith(_SPEC_CONTENT_TYPE)
+    ct_correct = bool(content_type) and (
+        content_type.split(";", 1)[0].strip().lower() == _SPEC_CONTENT_TYPE
+    )
     try:
         data = json.loads(text)
     except (json.JSONDecodeError, ValueError):

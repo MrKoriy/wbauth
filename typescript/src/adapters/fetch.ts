@@ -15,15 +15,25 @@
  *   redirect target. Method/body rewriting and cross-origin credential
  *   stripping follow the WHATWG fetch spec.
  *
+ * - `hosts` / `shouldSign` restrict which hosts receive your identity
+ *   (redirects to other hosts go out unsigned); plain-http requests are
+ *   unsigned unless `allowInsecure: true`.
+ *
  * v1 limitation: streaming bodies are buffered (`req.clone().arrayBuffer()`)
  * so Content-Digest can be computed.
  */
 
 import type { Identity } from "../identity.js";
 import { sign } from "../signer.js";
-import { applyUserAgent, ensureContentDigest } from "./_utils.js";
+import {
+	applyUserAgent,
+	ensureContentDigest,
+	makeSignDecider,
+	type SignScopeOptions,
+	stripSignatureHeaders,
+} from "./_utils.js";
 
-export interface SignedFetchOptions {
+export interface SignedFetchOptions extends SignScopeOptions {
 	/** Underlying fetch implementation. Defaults to `globalThis.fetch` at call time. */
 	fetch?: typeof fetch;
 	/** Maximum redirects followed (and re-signed). Default 20, like fetch. */
@@ -57,6 +67,7 @@ export function createSignedFetch(
 	identity: Identity,
 	options: SignedFetchOptions = {},
 ): typeof fetch {
+	const decide = makeSignDecider(options);
 	return async function signedFetch(
 		input: RequestInfo | URL,
 		init: RequestInit = {},
@@ -83,8 +94,13 @@ export function createSignedFetch(
 
 		for (let hop = 0; ; hop++) {
 			const headers: Record<string, string> = { ...baseHeaders };
-			ensureContentDigest(method, headers, body);
-			await sign({ method, url, headers, body }, identity);
+			if (decide(url)) {
+				ensureContentDigest(method, headers, body);
+				await sign({ method, url, headers, body }, identity);
+			} else {
+				// Out of scope (other host / plain http): never forward a signature.
+				stripSignatureHeaders(headers);
+			}
 			applyUserAgent(headers, identity.userAgent);
 
 			const outInit: RequestInit = {

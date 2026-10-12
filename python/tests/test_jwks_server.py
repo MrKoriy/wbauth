@@ -102,19 +102,20 @@ def test_serve_random_path_returns_404(jwks_file):
     assert exc.value.code == 404
 
 
-def test_serve_root_well_known_returns_404(jwks_file):
-    """D-50: wbauth serve does NOT replicate the directory's-own-kid endpoint.
-
-    The hosted Worker publishes its own JWKS at the root well-known path
-    (no kid suffix); `wbauth serve` is single-JWKS only and returns 404 there.
-    """
-    jwks_path, _ = jwks_file
+def test_serve_root_well_known_returns_jwks(jwks_file):
+    """The directory root (what Signature-Agent usually points at) is served,
+    query strings are ignored and HEAD works."""
+    jwks_path, kid = jwks_file
     port = _free_port()
     _start_server(jwks_path, port)
-    url = f"http://127.0.0.1:{port}/.well-known/http-message-signatures-directory"
-    with pytest.raises(urllib.request.HTTPError) as exc:
-        urllib.request.urlopen(url, timeout=2)
-    assert exc.value.code == 404
+    base = f"http://127.0.0.1:{port}/.well-known/http-message-signatures-directory"
+    with urllib.request.urlopen(base + "?v=1", timeout=2) as r:
+        assert r.status == 200
+        assert json.loads(r.read())["keys"][0]["kid"] == kid
+    req = urllib.request.Request(f"{base}/{kid}", method="HEAD")
+    with urllib.request.urlopen(req, timeout=2) as r:
+        assert r.status == 200
+        assert r.read() == b""
 
 
 def test_served_jwks_has_correct_cache_control(jwks_file):

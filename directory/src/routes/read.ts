@@ -3,8 +3,10 @@
 //   GET /.well-known/http-message-signatures-directory          (root, signed JWKS for the directory's own key)
 //   GET /.well-known/http-message-signatures-directory/{kid}    (signed agent JWKS)
 //   GET /agents/{kid}                                           (full Signature Agent Card, JSON)
-//   GET /agents                                                 (paginated, 50/page)
-//   GET /static/all.json                                        (full snapshot for nightly Action — Plan 03-02)
+//   GET /agents?cursor=…                                        (keyset-paginated, 50/page)
+//   GET /static/all.json?cursor=…                               (snapshot, keyset-paginated, 1000/page)
+//
+// Contacts are PII and never served publicly (audit #7).
 //
 // Cache-Control: `public, max-age=300` on the well-known endpoints — NO `immutable`
 // per Pitfall 1 + Open Question #4 resolution. The JWKS document at /{kid} CAN
@@ -26,7 +28,63 @@ import { getDirectorySigner, getDirectoryPublicJwks } from "../signing";
 export const readRouter = new Hono<{ Bindings: Env }>();
 
 const PAGE_SIZE = 50;
-const MAX_PAGE = 10_000;
+const SNAPSHOT_PAGE_SIZE = 1000;
+// Legacy ?page=N (OFFSET) is still honoured for small N only; use cursors.
+const MAX_LEGACY_PAGE = 20;
+
+const PUBLIC_COLUMNS = `kid, client_name, client_uri, signature_agent_url, expected_user_agent,
+            purpose, targeted_content, rate_control, keys,
+            created_at, last_updated, domain_verified, domain_verified_at`;
+
+interface Cursor {
+  t: number;
+  k: string;
+}
+
+function encodeCursor(c: Cursor): string {
+  return btoa(`${c.t}:${c.k}`).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeCursor(raw: string | undefined): Cursor | null {
+  if (!raw || raw.length > 128) return null;
+  try {
+    const s = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
+    const m = s.match(/^(\d{1,15}):([A-Za-z0-9_-]{1,64})$/);
+    return m ? { t: Number(m[1]), k: m[2] } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function keysetPage(
+  db: D1Database,
+  columns: string,
+  limit: number,
+  cursor: Cursor | null,
+  offset = 0,
+): Promise<{ rows: Record<string, unknown>[]; next: string | null }> {
+  const where = cursor ? `WHERE (created_at < ?1 OR (created_at = ?1 AND kid < ?2))` : "";
+  const sql = `SELECT ${columns} FROM agents ${where}
+     ORDER BY created_at DESC, kid DESC LIMIT ${limit + 1}${offset ? ` OFFSET ${offset}` : ""}`;
+  const stmt = db.prepare(sql);
+  const { results } = await (cursor ? stmt.bind(cursor.t, cursor.k) : stmt).all();
+  const rows = results as Record<string, unknown>[];
+  let next: string | null = null;
+  if (rows.length > limit) {
+    rows.length = limit;
+    const last = rows[rows.length - 1];
+    next = encodeCursor({ t: Number(last.created_at), k: String(last.kid) });
+  }
+  return { rows, next };
+}
+
+function toCard(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...row,
+    domain_verified: Boolean(row.domain_verified),
+    keys: JSON.parse(row.keys as string),
+  };
+}
 
 // Edge-cache every read endpoint (see src/cache.ts).
 readRouter.use("/.well-known/*", edgeCached);
@@ -68,7 +126,9 @@ readRouter.get("/.well-known/http-message-signatures-directory", async (c) => {
   });
 });
 
-// Per-kid agent JWKS, signed by the directory's key.
+// Per-kid agent JWKS, signed by the directory's key. The stored `keys`
+// column is already the canonical public-only JWKS string, so it is served
+// verbatim — no parse/stringify on the hot path (audit #19).
 readRouter.get(
   "/.well-known/http-message-signatures-directory/:kid",
   async (c) => {
@@ -80,10 +140,7 @@ readRouter.get(
       .first<{ keys: string }>();
     if (!row) return c.json({ error: "not_found" }, 404);
 
-    const jwks = JSON.parse(row.keys);
-    const body = JSON.stringify(jwks);
     const signer = await getDirectorySigner(c.env.DIRECTORY_PRIVATE_JWK);
-
     const now = new Date();
     const sigHeaders = await directoryResponseHeaders(
       {
@@ -97,7 +154,7 @@ readRouter.get(
       { created: now, expires: new Date(now.getTime() + 300_000) },
     );
 
-    return new Response(body, {
+    return new Response(row.keys, {
       status: 200,
       headers: {
         "content-type": WELL_KNOWN_CONTENT_TYPE,
@@ -109,67 +166,55 @@ readRouter.get(
   },
 );
 
-// Full Signature Agent Card (unsigned JSON, short cache).
+// Public Signature Agent Card (unsigned JSON, short cache). No contacts.
 readRouter.get("/agents/:kid", async (c) => {
   const kid = c.req.param("kid");
   const row = await c.env.DB.prepare(
-    `SELECT kid, client_name, client_uri, signature_agent_url, expected_user_agent,
-            contacts, purpose, targeted_content, rate_control, keys,
-            created_at, last_updated, domain_verified, domain_verified_at
-     FROM agents WHERE kid = ?`,
+    `SELECT ${PUBLIC_COLUMNS} FROM agents WHERE kid = ?`,
   )
     .bind(kid)
-    .first();
+    .first<Record<string, unknown>>();
   if (!row) return c.json({ error: "not_found" }, 404);
-  const card = {
-    ...row,
-    domain_verified: Boolean((row as { domain_verified?: number }).domain_verified),
-    contacts: JSON.parse((row as { contacts?: string }).contacts ?? "[]"),
-    keys: JSON.parse((row as { keys: string }).keys),
-  };
   c.header("cache-control", "public, max-age=60");
-  return c.json(card);
+  return c.json(toCard(row));
 });
 
-// Paginated list — 50/page; use /static/all.json for a full snapshot
-// (intentional escape hatch for the nightly snapshot job — Plan 03-02 prefers
-// /static/all.json but this works as a fallback).
+// Keyset-paginated list (stable under concurrent inserts, O(log n) per page).
+// Follow `next_cursor` until it is null.
 readRouter.get("/agents", async (c) => {
+  const cursor = decodeCursor(c.req.query("cursor"));
   const rawPage = Number.parseInt(c.req.query("page") ?? "1", 10);
-  const page = Number.isFinite(rawPage)
-    ? Math.min(MAX_PAGE, Math.max(1, rawPage))
-    : 1;
-  const offset = (page - 1) * PAGE_SIZE;
-  const { results } = await c.env.DB.prepare(
-    `SELECT kid, client_name, signature_agent_url, created_at, domain_verified
-     FROM agents ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-  )
-    .bind(PAGE_SIZE, offset)
-    .all();
-  for (const r of results as { domain_verified?: number | boolean }[]) {
-    r.domain_verified = Boolean(r.domain_verified);
-  }
+  const page = cursor
+    ? 1
+    : Number.isFinite(rawPage)
+      ? Math.min(MAX_LEGACY_PAGE, Math.max(1, rawPage))
+      : 1;
+  const { rows, next } = await keysetPage(
+    c.env.DB,
+    "kid, client_name, signature_agent_url, created_at, domain_verified",
+    PAGE_SIZE,
+    cursor,
+    cursor ? 0 : (page - 1) * PAGE_SIZE,
+  );
+  for (const r of rows) r.domain_verified = Boolean(r.domain_verified);
   c.header("cache-control", "public, max-age=300");
-  return c.json({ page, count: results.length, agents: results });
+  return c.json({ page, count: rows.length, next_cursor: next, agents: rows });
 });
 
-// Full snapshot — Plan 03-02's nightly GitHub Action consumes this.
+// Snapshot for the nightly Action — keyset-paginated (no 10k silent cap).
 readRouter.get("/static/all.json", async (c) => {
-  const { results } = await c.env.DB.prepare(
-    `SELECT kid, client_name, client_uri, signature_agent_url, expected_user_agent,
-            contacts, purpose, targeted_content, rate_control, keys,
-            created_at, last_updated, domain_verified, domain_verified_at
-     FROM agents ORDER BY created_at DESC LIMIT 10000`,
-  ).all();
-  const agents = results.map((row) => {
-    const r = row as { contacts?: string; keys: string } & Record<string, unknown>;
-    return {
-      ...r,
-      domain_verified: Boolean(r.domain_verified),
-      contacts: JSON.parse(r.contacts ?? "[]"),
-      keys: JSON.parse(r.keys),
-    };
-  });
+  const cursor = decodeCursor(c.req.query("cursor"));
+  const { rows, next } = await keysetPage(
+    c.env.DB,
+    PUBLIC_COLUMNS,
+    SNAPSHOT_PAGE_SIZE,
+    cursor,
+  );
   c.header("cache-control", "public, max-age=300");
-  return c.json({ generated_at: Math.floor(Date.now() / 1000), agents });
+  return c.json({
+    generated_at: Math.floor(Date.now() / 1000),
+    count: rows.length,
+    next_cursor: next,
+    agents: rows.map(toCard),
+  });
 });

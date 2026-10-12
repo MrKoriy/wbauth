@@ -31,9 +31,57 @@ export function ensureContentDigest(
 ): void {
 	if (!body || body.byteLength === 0) return;
 	void method; // any method with a body is covered (DELETE, QUERY, …)
-	if (findHeader(headers, "content-digest")) return;
 	const b64 = createHash("sha256").update(body).digest("base64");
+	const key = findHeader(headers, "content-digest");
+	if (key !== undefined) {
+		const m = /(?:^|,)\s*sha-256=:([A-Za-z0-9+/=]+):/.exec(headers[key] ?? "");
+		// Caller's own digest (other algorithm) or still correct → keep.
+		if (m === null || m[1] === b64) return;
+		delete headers[key]; // stale digest (e.g. previous redirect hop)
+	}
 	headers["Content-Digest"] = `sha-256=:${b64}:`;
+}
+
+const SIGNATURE_HEADERS = new Set([
+	"signature",
+	"signature-input",
+	"signature-agent",
+]);
+
+/** Remove Signature / Signature-Input / Signature-Agent in any casing. */
+export function stripSignatureHeaders(headers: Record<string, string>): void {
+	for (const k of Object.keys(headers)) {
+		if (SIGNATURE_HEADERS.has(k.toLowerCase())) delete headers[k];
+	}
+}
+
+export interface SignScopeOptions {
+	/** Only sign requests to these hosts (`example.com`, `*.example.com`). */
+	hosts?: readonly string[];
+	/** Custom predicate; takes precedence over `hosts`. */
+	shouldSign?: (url: URL) => boolean;
+	/** Also sign plain `http://` requests (off by default: replayable in clear text). */
+	allowInsecure?: boolean;
+}
+
+/** The shared "sign this URL?" predicate used by every adapter. */
+export function makeSignDecider(
+	opts: SignScopeOptions = {},
+): (raw: string) => boolean {
+	return (raw: string) => {
+		let u: URL;
+		try {
+			u = new URL(raw);
+		} catch {
+			return false;
+		}
+		if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+		if (!u.hostname) return false;
+		if (u.protocol === "http:" && !opts.allowInsecure) return false;
+		if (opts.shouldSign) return opts.shouldSign(u);
+		if (opts.hosts) return hostMatches(u.hostname, opts.hosts);
+		return true;
+	};
 }
 
 /**

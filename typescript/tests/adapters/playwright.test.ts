@@ -99,19 +99,23 @@ describe("applyTo", () => {
 		};
 		await invoke({ continue: continueSpy }, mockReq);
 		await invoke({ continue: continueSpy }, mockReq);
-		const h1 = (
-			continueSpy.mock.calls[0]?.[0] as { headers: Record<string, string> }
-		).headers["Signature-Input"];
-		const h2 = (
-			continueSpy.mock.calls[1]?.[0] as { headers: Record<string, string> }
-		).headers["Signature-Input"];
+		const call0 = continueSpy.mock.calls[0]?.[0] as
+			| { headers: Record<string, string> }
+			| undefined;
+		const call1 = continueSpy.mock.calls[1]?.[0] as
+			| { headers: Record<string, string> }
+			| undefined;
+		expect(call0?.headers).toBeDefined();
+		expect(call1?.headers).toBeDefined();
+		const h1 = call0!.headers["Signature-Input"];
+		const h2 = call1!.headers["Signature-Input"];
 		expect(h1).not.toBe(h2);
 	});
 
 	it("UA injection only when caller did NOT set one", async () => {
-		const id = await Identity.fromTestKey("https://example.com/agent.json");
-		// Backdoor: userAgent is `readonly` on the type but assignable here for testing.
-		(id as unknown as { userAgent: string }).userAgent = "wbauth-test/1.0";
+		const id = await Identity.fromTestKey("https://example.com/agent.json", {
+			userAgent: "wbauth-test/1.0",
+		});
 		const { page, invoke } = fakePage();
 		await applyTo(page, id);
 
@@ -125,9 +129,11 @@ describe("applyTo", () => {
 				postDataBuffer: () => null,
 			},
 		);
-		const headers0 = (
-			continueSpy.mock.calls[0]?.[0] as { headers: Record<string, string> }
-		).headers;
+		const firstCall = continueSpy.mock.calls[0]?.[0] as
+			| { headers: Record<string, string> }
+			| undefined;
+		expect(firstCall?.headers).toBeDefined();
+		const headers0 = firstCall!.headers;
 		expect(headers0["User-Agent"]).toBe("wbauth-test/1.0");
 
 		continueSpy.mockClear();
@@ -140,9 +146,11 @@ describe("applyTo", () => {
 				postDataBuffer: () => null,
 			},
 		);
-		const headers1 = (
-			continueSpy.mock.calls[0]?.[0] as { headers: Record<string, string> }
-		).headers;
+		const secondCall = continueSpy.mock.calls[0]?.[0] as
+			| { headers: Record<string, string> }
+			| undefined;
+		expect(secondCall?.headers).toBeDefined();
+		const headers1 = secondCall!.headers;
 		// Caller-supplied UA preserved; identity.userAgent NOT injected.
 		expect(headers1["User-Agent"]).toBeUndefined();
 		expect(headers1["user-agent"]).toBe("caller/2");

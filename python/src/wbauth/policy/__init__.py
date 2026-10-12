@@ -8,7 +8,8 @@ Public surface:
   - errors module (PolicyError, RobotsParseError, FetchError, VerdictError)
 """
 from . import errors
-from .inspector import inspect, load_cache, save_cache
+from .guard import PolicyEnforcingTransport, PolicyForbiddenError, PolicyGuard
+from .inspector import aclose_shared_clients, inspect, inspect_sync, load_cache, save_cache
 from .policy import (
     AiTxtResult,
     LlmsTxtLink,
@@ -27,8 +28,13 @@ __all__ = [
     "RobotsResult",
     "SigningDirectoryResult",
     "SitePolicy",
+    "PolicyEnforcingTransport",
+    "PolicyForbiddenError",
+    "PolicyGuard",
+    "aclose_shared_clients",
     "errors",
     "inspect",
+    "inspect_sync",
     "load_cache",
     "save_cache",
 ]

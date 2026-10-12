@@ -26,7 +26,7 @@ from typing import Literal
 
 import httpx
 
-from .errors import RobotsParseError
+from .errors import PrivateAddressError, RobotsParseError
 from .policy import (
     AiTxtResult,
     LlmsTxtResult,
@@ -65,7 +65,16 @@ def restriction_applies(rule: str, target_path: str | None) -> bool:
     if not paths:
         return True
     target = target_path or "/"
-    return any(target.startswith(p) for p in paths)
+    return any(_path_covers(p, target) for p in paths)
+
+
+def _path_covers(rule_path: str, target: str) -> bool:
+    """Segment-aware prefix match: ``/admin`` covers ``/admin`` and
+    ``/admin/x`` but not ``/administrator``; ``/admin/`` and ``/`` are
+    plain prefixes."""
+    if rule_path.endswith("/"):
+        return target.startswith(rule_path)
+    return target == rule_path or target.startswith(rule_path + "/")
 
 
 def is_unavailable_status(status: int) -> bool:
@@ -101,6 +110,8 @@ def compute_verdict(
         forbidden_signals.append(
             "robots.txt unparseable (HTML response); assuming disallowed per strict policy"
         )
+    elif isinstance(robots_err, PrivateAddressError):
+        forbidden_signals.append(f"robots.txt refused by SSRF guard ({robots_err})")
     elif isinstance(robots_err, httpx.HTTPStatusError):
         status = robots_err.response.status_code
         if is_unavailable_status(status):

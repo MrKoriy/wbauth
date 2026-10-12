@@ -5,16 +5,17 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: read
-  id-token: write   # PyPI trusted publishing + npm provenance
+# Least privilege: nothing by default; OIDC (id-token) only on publish jobs.
+permissions: {}
 
 jobs:
   check-versions:
     name: Tag matches package versions
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Compare tag with python/pyproject.toml, typescript/package.json and VERSION constants
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -32,9 +33,12 @@ jobs:
     needs: check-versions
     runs-on: ubuntu-latest
     environment: pypi
+    permissions:
+      contents: read
+      id-token: write   # PyPI trusted publishing
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           version: "0.13.0"
           python-version: "3.12"
@@ -42,10 +46,12 @@ jobs:
         run: |
           uv sync --locked --all-extras --dev --all-packages
           uv run pytest python/tests -q
+      - name: Dependency audit (pip-audit)
+        run: uvx pip-audit==2.9.0 --strict --progress-spinner off -r <(uv export --locked --all-extras --no-dev --no-hashes --all-packages --no-emit-workspace)
       - name: Build distribution packages
         run: uv build --package wbauth-sdk --out-dir python/dist
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: python/dist/
           skip-existing: true
@@ -55,20 +61,31 @@ jobs:
     needs: check-versions
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: read
+      id-token: write   # npm trusted publishing (OIDC) + provenance
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
           cache: npm
       - run: npm ci
+      - name: Dependency audit (production deps)
+        run: npm audit --omit=dev --audit-level=high
       - name: Lint, type check, test, build
         run: |
           npm run lint --workspace=wb-auth
           npm run typecheck --workspace=wb-auth
           npm run test --workspace=wb-auth
           npm run build --workspace=wb-auth
+      # npm trusted publishing (OIDC): no long-lived NPM_TOKEN secret.
+      # Configure the trusted publisher for `wb-auth` on npmjs.com
+      # (repo MrKoriy/wbauth, workflow release.yml, environment npm), then
+      # delete the NPM_TOKEN secret. Requires npm >= 11.5.1.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@11
       - name: Publish to npm with provenance
         run: npm publish --workspace=wb-auth --access public --provenance
         env:

@@ -23,9 +23,8 @@ set serviceWorkers="block" on the BrowserContext (Playwright option).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from urllib.parse import urlsplit
 
-from wbauth.adapters._utils import apply_user_agent, ensure_content_digest, host_matches
+from wbauth.adapters._utils import apply_user_agent, ensure_content_digest, make_sign_decider
 from wbauth.normalized_request import NormalizedRequest
 from wbauth.signer import sign
 
@@ -37,7 +36,8 @@ async def attach_signing(
     hosts: Iterable[str] | None = None,
     should_sign: Callable[[str], bool] | None = None,
     pattern: str = "**/*",
-) -> None:
+    allow_insecure: bool = False,
+) -> Callable[[], "object"]:
     """Register a route handler on ``page`` that signs matching requests.
 
     Args:
@@ -45,18 +45,12 @@ async def attach_signing(
             ``*.example.com``). ``None`` = sign every http(s) request.
         should_sign: Custom predicate on the request URL; overrides ``hosts``.
         pattern: Route glob passed to ``page.route``.
-    """
-    allow = list(hosts) if hosts is not None else None
+        allow_insecure: also sign plain ``http://`` requests (off by default).
 
-    def _decide(url: str) -> bool:
-        parts = urlsplit(url)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            return False
-        if should_sign is not None:
-            return bool(should_sign(url))
-        if allow is not None:
-            return host_matches(parts.hostname, allow)
-        return True
+    Returns:
+        An async ``detach()`` callable that removes the route handler.
+    """
+    _decide = make_sign_decider(hosts, should_sign, allow_insecure)
 
     async def _handler(route, request):
         if not _decide(request.url):
@@ -78,3 +72,8 @@ async def attach_signing(
         await route.continue_(headers=headers)
 
     await page.route(pattern, _handler)
+
+    async def detach() -> None:
+        await page.unroute(pattern, _handler)
+
+    return detach

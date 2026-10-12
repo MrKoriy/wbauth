@@ -120,7 +120,7 @@ def test_verify_identity_arg_warns_but_uses_test_key(capsys, httpx_mock):
     assert rc == 0  # the test key is still valid → pass
     cap = capsys.readouterr()
     assert "warning:" in cap.err.lower()
-    assert "reserved for phase 3" in cap.err.lower()
+    assert "deprecated" in cap.err.lower()
     # Inspect the outgoing request — pytest-httpx captures it.
     sent = httpx_mock.get_requests()[0]
     sig_input = sent.headers.get("signature-input", "")

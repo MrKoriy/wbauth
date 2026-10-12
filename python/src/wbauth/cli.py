@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import dataclasses
 import json
 import os
 import sys
@@ -73,6 +72,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Where to write the private key (default: {DEFAULT_KEY_PATH}).",
     )
     kg.add_argument(
+        "--keyring",
+        default=None,
+        metavar="DIR",
+        help="Create DIR/active.pem instead of --output (pair with `wbauth rotate`).",
+    )
+    kg.add_argument(
         "--signature-agent-url",
         default="https://example.invalid/placeholder",
         help=(
@@ -104,7 +109,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "compute a deterministic strict verdict (allowed/restricted/"
             "forbidden), and print a human-readable summary. Exit code "
             "matches the verdict per D-24: 0=allowed, 1=restricted, "
-            "2=forbidden, 3=fetch error or unrecoverable exception."
+            "2=forbidden, 3=invalid URL, unexpected error, or the site was "
+            "unreachable (every policy endpoint failed with a network error)."
         ),
     )
     insp.add_argument(
@@ -135,6 +141,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Evaluate robots.txt for this User-Agent (default: wbauth/<version>).",
     )
+    insp.add_argument(
+        "--include-raw",
+        action="store_true",
+        help="With --json: also include the raw policy file bodies.",
+    )
+    insp.add_argument(
+        "--no-private",
+        action="store_true",
+        help="Refuse targets on loopback/private networks (SSRF guard).",
+    )
 
     # ---- verify (Phase 2, CLI-03) ------------------------------------------
     ver = sub.add_parser(
@@ -150,25 +166,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "(Phase 3+)."
         ),
     )
-    ver.add_argument(
-        "--domain",
-        required=True,
-        help=(
-            "Domain to verify (informational in v1; the actual probe targets "
-            "Cloudflare's research verifier per L-04 and is independent of "
-            "this value). Phase 3 will wire --domain to a domain-specific "
-            "verifier path after directory registration."
-        ),
-    )
-    ver.add_argument(
-        "--identity",
-        default=None,
-        help=(
-            "Path to identity key. RESERVED for Phase 3 — v1 always uses "
-            "the RFC 9421 test key against the research verifier; passing "
-            "this in v1 prints a warning and uses the test key anyway."
-        ),
-    )
+    # Deprecated no-op flags kept (hidden) so existing scripts don't break:
+    # the probe always targets Cloudflare's research verifier with the test key.
+    ver.add_argument("--domain", default="research-verifier", help=argparse.SUPPRESS)
+    ver.add_argument("--identity", default=None, help=argparse.SUPPRESS)
     ver.add_argument(
         "--json",
         action="store_true",
@@ -188,7 +189,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "Exit 0 on success, 1 on rejection."
         ),
     )
-    reg.add_argument("--identity", required=True, help="Path to private key PEM.")
+    reg.add_argument("--identity", required=True,
+                     help="Path to an EXISTING private key PEM (never created here).")
     reg.add_argument(
         "--directory",
         default="https://wbauth.silov801.workers.dev",
@@ -221,6 +223,22 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to the JWKS JSON file (from `wbauth keygen --jwks-output`).",
     )
     sv.add_argument("--port", type=int, default=8080, help="TCP port (default: 8080).")
+    sv.add_argument("--host", default="127.0.0.1",
+                    help="Bind address (default: 127.0.0.1; use 0.0.0.0 to expose).")
+    sv.add_argument("--sign-key", action="append", default=[], metavar="PEM",
+                    help="Sign directory responses with this key (repeat for "
+                         "every key in the JWKS, as the directory draft requires).")
+    sv.add_argument("--tls-cert", default=None, help="Serve HTTPS with this certificate.")
+    sv.add_argument("--tls-key", default=None, help="Private key for --tls-cert.")
+
+    # ---- rotate -------------------------------------------------------------
+    rot = sub.add_parser(
+        "rotate",
+        help="Rotate the keyring: active.pem → retiring.pem, new active.pem.",
+    )
+    rot.add_argument("--keyring", required=True, metavar="DIR")
+    rot.add_argument("--jwks-output", default=None,
+                     help="Write the new JWKS (active + retiring) here.")
 
     return parser
 
@@ -228,42 +246,9 @@ def _build_parser() -> argparse.ArgumentParser:
 # ---------- inspect handler (CLI-02, D-24) ----------
 
 
-def _serialize_policy(policy: SitePolicy) -> dict:
-    """Convert a SitePolicy to a JSON-serializable dict.
-
-    Built field-by-field at the top level rather than via
-    ``dataclasses.asdict(policy)`` — ``asdict`` deepcopies every value,
-    and exception types like ``httpx.HTTPStatusError`` raise ``TypeError``
-    on deepcopy because their ``__init__`` requires keyword-only args.
-    Nested dataclasses (RobotsResult, AiTxtResult, etc.) are deepcopy-safe,
-    so ``asdict`` is fine for those individually.
-
-    Field handling:
-
-      - ``errors``: ``dict[str, Exception]`` → ``{"type": cls_name, "message": str(exc)}``
-        per endpoint. Preserves introspectability; does not deepcopy the exception.
-      - ``fetched_at``: ``datetime`` — caller's ``json.dumps(default=str)``
-        renders it as ISO-8601.
-    """
-    return {
-        "url": policy.url,
-        "robots": dataclasses.asdict(policy.robots) if policy.robots is not None else None,
-        "ai_txt": dataclasses.asdict(policy.ai_txt) if policy.ai_txt is not None else None,
-        "llms_txt": dataclasses.asdict(policy.llms_txt) if policy.llms_txt is not None else None,
-        "signing_directory": (
-            dataclasses.asdict(policy.signing_directory)
-            if policy.signing_directory is not None
-            else None
-        ),
-        "verdict": policy.verdict,
-        "reasons": list(policy.reasons),
-        "partial": policy.partial,
-        "errors": {
-            name: {"type": type(exc).__name__, "message": str(exc)}
-            for name, exc in policy.errors.items()
-        },
-        "fetched_at": policy.fetched_at,
-    }
+def _serialize_policy(policy: SitePolicy, include_raw: bool = True) -> dict:
+    """Back-compat wrapper around :meth:`SitePolicy.to_dict`."""
+    return policy.to_dict(include_raw=include_raw)
 
 
 def _print_human_summary(policy: SitePolicy) -> None:
@@ -385,7 +370,8 @@ def _dispatch_inspect(args: argparse.Namespace) -> int:
         load_cache(os.path.expanduser(cache_path))
     try:
         policy: SitePolicy = asyncio.run(
-            inspect(args.url, user_agent=args.user_agent)
+            inspect(args.url, user_agent=args.user_agent,
+                    allow_private=not getattr(args, "no_private", False))
         )
     except ValueError as e:
         # URL parse errors from inspect() itself (e.g., httpx URL parsing).
@@ -406,13 +392,26 @@ def _dispatch_inspect(args: argparse.Namespace) -> int:
         except OSError as e:
             print(f"warning: could not write cache {cache_path}: {e}", file=sys.stderr)
     if fmt == "json":
-        # default=str handles the datetime field (fetched_at).
-        print(json.dumps(_serialize_policy(policy), default=str))
+        print(json.dumps(policy.to_dict(include_raw=getattr(args, "include_raw", False)),
+                         default=str))
     elif fmt == "table":
         _print_table(policy)
     else:
         _print_human_summary(policy)
+    if _site_unreachable(policy):
+        return 3
     return {"allowed": 0, "restricted": 1, "forbidden": 2}.get(policy.verdict, 3)
+
+
+def _site_unreachable(policy: SitePolicy) -> bool:
+    """Every endpoint failed with a transport-level error (no HTTP answer)."""
+    import httpx
+
+    names = ("robots", "ai_txt", "llms_txt", "signing_directory")
+    return all(
+        isinstance(policy.errors.get(n), (httpx.TransportError, httpx.TimeoutException))
+        for n in names
+    )
 
 
 # ---------- verify handler (CLI-03, D-25) ----------
@@ -455,11 +454,10 @@ def _dispatch_verify(args: argparse.Namespace) -> int:
     # import cost on every CLI invocation.
     from ._smoke.cloudflare_debug import run_against_domain
 
-    if args.identity:
+    if args.identity or args.domain != "research-verifier":
         print(
-            "warning: --identity is reserved for Phase 3+ "
-            "(registered-key verification); v1 always uses the test key "
-            "against Cloudflare's research verifier",
+            "warning: --identity/--domain are deprecated no-ops; the probe always "
+            "uses the RFC 9421 test key against Cloudflare's research verifier",
             file=sys.stderr,
         )
     try:
@@ -488,23 +486,30 @@ def _dispatch_keygen(args: argparse.Namespace) -> int:
     Stderr discipline: error messages prefixed with ``error:`` go to stderr;
     success lines (path + kid) go to stdout.
     """
+    from pathlib import Path
+
+    from .identity import KEYRING_ACTIVE
+
+    out = (str(Path(args.keyring).expanduser() / KEYRING_ACTIVE)
+           if getattr(args, "keyring", None) else args.output)
     try:
-        identity = Identity.load_or_generate(
-            args.output,
-            signature_agent_url=args.signature_agent_url,
-        )
-    except (PermissionError, FileExistsError, TypeError, ValueError) as e:
+        # generate(), not load_or_generate(): an existing key is an error,
+        # never silently reported as "written".
+        identity = Identity.generate(out, signature_agent_url=args.signature_agent_url)
+    except FileExistsError:
+        print(f"error: key already exists at {out}; refusing to overwrite "
+              "(use `wbauth rotate --keyring DIR` to rotate)", file=sys.stderr)
+        return 2
+    except (PermissionError, TypeError, ValueError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    print(f"Wrote key to {args.output} (mode 0o600)")
+    print(f"Wrote key to {out} (mode 0o600)")
     print(f"kid: {identity.kid}")
     # D-51: optional JWKS dump for self-hosters. Only the public material —
     # `Identity.export_jwks()` returns {kty, crv, kid, x} (never `d`), so
     # this file is safe to publish at /.well-known/... or feed into
     # `wbauth serve` (CLI-05). Pretty-printed (indent=2) so users can `cat` it.
     if getattr(args, "jwks_output", None):
-        from pathlib import Path
-
         Path(args.jwks_output).write_text(
             json.dumps(identity.export_jwks(), indent=2)
         )
@@ -531,9 +536,37 @@ def _dispatch_serve(args: argparse.Namespace) -> int:
     from ._http_server.jwks_server import serve
 
     try:
-        serve(args.jwks, args.port)
+        serve(
+            args.jwks, args.port,
+            host=getattr(args, "host", "127.0.0.1"),
+            sign_keys=getattr(args, "sign_key", None) or (),
+            tls_cert=getattr(args, "tls_cert", None),
+            tls_key=getattr(args, "tls_key", None),
+        )
     except KeyboardInterrupt:
         return 130
+    except (OSError, ValueError, TypeError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _dispatch_rotate(args: argparse.Namespace) -> int:
+    placeholder = "https://example.invalid/placeholder"
+    try:
+        ident = Identity.load_keyring(args.keyring, signature_agent_url=placeholder)
+        new = ident.rotate_keyring(args.keyring)
+    except (OSError, TypeError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(f"Rotated keyring {args.keyring}")
+    print(f"active kid:   {new.kid}")
+    print(f"retiring kid: {ident.kid}")
+    if args.jwks_output:
+        from pathlib import Path
+
+        Path(args.jwks_output).write_text(json.dumps(new.export_jwks(), indent=2))
+        print(f"Wrote JWKS to {args.jwks_output}")
     return 0
 
 
@@ -579,19 +612,20 @@ async def _do_register(
     # then re-load with the canonical URL so the produced signature commits to
     # the right value (T-03-17 mitigation). The second load_or_generate hits the
     # existing-file path; cost is one PEM parse, no fresh keygen.
-    temp_identity = Identity.load_or_generate(
-        identity_path,
-        signature_agent_url=(
-            f"{directory_url}/.well-known/http-message-signatures-directory/_temp"
-        ),
-    )
+    from pathlib import Path
+
+    from .identity import _load_keypair
+
+    directory_url = directory_url.rstrip("/")
+    path = Path(identity_path).expanduser()
+    if not path.exists():
+        # Never generate here: a typo would silently register a brand-new key.
+        raise FileNotFoundError(f"No key at {path}; create one with `wbauth keygen`")
+    pair = _load_keypair(path)  # one PEM parse; kid needs no server round-trip
     canonical_signature_agent = (
-        f"{directory_url}/.well-known/http-message-signatures-directory/{temp_identity.kid}"
+        f"{directory_url}/.well-known/http-message-signatures-directory/{pair.kid}"
     )
-    identity = Identity.load_or_generate(
-        identity_path,
-        signature_agent_url=canonical_signature_agent,
-    )
+    identity = Identity(pair, canonical_signature_agent)
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         # Step 1: POST /register/challenge {kid} → {challenge, expires_at}.
@@ -676,7 +710,16 @@ def _dispatch_register(args: argparse.Namespace) -> int:
 
     # If client_name not supplied, prompt interactively. D-49 specifies "prompts
     # for client_name and purpose (or accepts --client-name/--purpose args)".
-    client_name = args.client_name or input("client_name: ").strip()
+    client_name = args.client_name
+    if not client_name:
+        if not sys.stdin.isatty():
+            print("error: --client-name is required when stdin is not a terminal",
+                  file=sys.stderr)
+            return 1
+        client_name = input("client_name: ").strip()
+    if not client_name:
+        print("error: client_name must not be empty", file=sys.stderr)
+        return 1
     try:
         result = asyncio.run(_do_register(
             identity_path=args.identity,
@@ -717,6 +760,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _dispatch_register(args)
     if args.cmd == "serve":
         return _dispatch_serve(args)
+    if args.cmd == "rotate":
+        return _dispatch_rotate(args)
     return 1
 
 

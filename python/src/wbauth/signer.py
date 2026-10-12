@@ -40,6 +40,10 @@ MAX_EXPIRES_SECONDS = 3600
 """Hard upper bound for the validity window. A long-lived signature is a
 replayable bearer credential for every covered (@authority, agent) pair."""
 
+NONCE_BYTES = 64
+"""Random bytes in the default nonce (standard base64), matching
+web-bot-auth's ``NONCE_LENGTH_IN_BYTES`` and the TypeScript SDK."""
+
 _RESIGN_HEADERS = frozenset({"signature", "signature-input", "signature-agent"})
 
 DEFAULT_COMPONENTS: tuple[str, ...] = ("@authority", "signature-agent")
@@ -185,7 +189,7 @@ def sign(
             for test-vector reproducibility.
         expires_after_seconds: window during which the signature is valid.
             Defaults to 60s; 5s+ NTP slack-safe per Pitfall 3.
-        nonce: anti-replay nonce. Defaults to 16 random url-safe bytes.
+        nonce: anti-replay nonce. Defaults to 64 random bytes, base64.
             Override for test-vector reproducibility.
         label: Signature label (the `sig1=` prefix). Defaults to "sig1".
 
@@ -193,13 +197,11 @@ def sign(
         ValueError: if the identity's signature_agent_url is not https://.
             (Defensive re-check — Identity.__init__ also enforces this.)
     """
-    # 1. Defensive https:// check (Identity.__init__ enforces this, but a future
-    # caller bypassing the constructor would otherwise leak http://). Pitfall 1.
-    if not identity.signature_agent_url.startswith("https://"):
-        raise ValueError(
-            f"signature_agent_url must be https://, got: "
-            f"{identity.signature_agent_url!r}"
-        )
+    # 1. Defensive URL check (Identity.__init__ enforces this too; duck-typed
+    # identities would otherwise leak http:// or break the sf-string). Pitfall 1.
+    from .identity import validate_signature_agent_url
+
+    validate_signature_agent_url(identity.signature_agent_url)
 
     if (
         isinstance(expires_after_seconds, bool)
@@ -218,14 +220,14 @@ def sign(
         del request.headers[k]
 
     # 2. Signature-Agent header (RFC 8941 Structured Field — string in quotes).
-    request.headers["Signature-Agent"] = f'"{identity.signature_agent_url}"'
+    request.headers["Signature-Agent"] = _sf_string(identity.signature_agent_url)
 
     # 3. Defaults for created/expires/nonce.
     if created is None:
         created = datetime.datetime.now(datetime.timezone.utc)
     expires = created + datetime.timedelta(seconds=expires_after_seconds)
     if nonce is None:
-        nonce = secrets.token_urlsafe(16)
+        nonce = base64.b64encode(secrets.token_bytes(NONCE_BYTES)).decode("ascii")
 
     # 4. Covered components: any non-empty body is bound via content-digest.
     has_body = bool(getattr(request, "body", None))
